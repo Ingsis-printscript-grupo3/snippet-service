@@ -1,0 +1,112 @@
+# el sistema entero de Snippet Searcher: 3 servicios, sus bases y el bucket. Auth0 es externo.
+#
+# Los otros dos servicios se construyen desde su repo, asi que los tres tienen que estar clonados
+# uno al lado del otro:
+#   IngenieriaSistemas/
+#   ├── snippet-service/      <- este repo
+#   ├── printscript-service/
+#   └── permission-service/
+#
+# Antes de levantarlo: cp .env.example .env y completar el token de GitHub.
+#   docker compose up --build
+
+services:
+  snippet-service:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      DB_URL: jdbc:postgresql://snippet-db:5432/snippets
+      DB_USER: snippet
+      DB_PASSWORD: snippet
+      PRINTSCRIPT_SERVICE_URL: http://printscript-service:8080
+      PERMISSION_SERVICE_URL: http://permission-service:8081
+      ASSET_SERVICE_URL: http://asset-service:8080
+    depends_on:
+      snippet-db:
+        condition: service_healthy
+      printscript-service:
+        condition: service_started
+      permission-service:
+        condition: service_started
+      asset-service:
+        condition: service_started
+
+  snippet-db:
+    image: postgres:17
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: snippets
+      POSTGRES_USER: snippet
+      POSTGRES_PASSWORD: snippet
+    volumes:
+      - snippet-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U snippet -d snippets"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # stateless: no tiene base. El token solo se usa para compilar y no queda en la imagen final
+  printscript-service:
+    build:
+      context: ../printscript-service
+      args:
+        GITHUB_ACTOR: ${GITHUB_ACTOR:?falta GITHUB_ACTOR en .env}
+        GITHUB_TOKEN: ${GITHUB_TOKEN:?falta GITHUB_TOKEN en .env}
+    ports:
+      - "8082:8080"
+
+  permission-service:
+    build: ../permission-service
+    ports:
+      - "8081:8081"
+    environment:
+      DB_URL: jdbc:postgresql://permission-db:5432/permissions
+      DB_USER: permission
+      DB_PASSWORD: permission
+    depends_on:
+      permission-db:
+        condition: service_healthy
+
+  permission-db:
+    image: postgres:17
+    # 5433 en el host: el 5432 ya lo usa la base del snippet-service
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_DB: permissions
+      POSTGRES_USER: permission
+      POSTGRES_PASSWORD: permission
+    volumes:
+      - permission-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U permission -d permissions"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # el bucket: el asset service de la catedra (austral-ingsis/asset-service) guardando en Azurite
+  asset-service:
+    image: ghcr.io/austral-ingsis/snippet-asset-service:latest
+    ports:
+      - "8083:8080"
+    environment:
+      AZURE_HOST: http://azurite
+      NEW_RELIC_AGENT_ENABLED: "false"
+    depends_on:
+      - azurite
+
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    hostname: azurite
+    ports:
+      - "10000:10000"
+    volumes:
+      - blob-data:/data
+
+volumes:
+  snippet-data:
+  permission-data:
+  blob-data:

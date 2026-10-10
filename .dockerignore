@@ -1,0 +1,14 @@
+# nada de esto hace falta para construir la imagen
+.git
+.github
+.gitignore
+.idea
+build
+.gradle
+.kotlin
+*.md
+.env
+.env.example
+docker-compose.yml
+Dockerfile
+.dockerignore
