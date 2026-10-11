@@ -36,6 +36,7 @@ data class SnippetResponse(
     val language: String,
     val version: String,
     val ownerId: String,
+    val lintStatus: LintStatus,
     val content: String,
 )
 
@@ -47,11 +48,13 @@ data class SnippetSummary(
     val language: String,
     val version: String,
     val ownerId: String,
+    val lintStatus: LintStatus,
 )
 
-fun Snippet.toResponse(content: String) = SnippetResponse(id, name, description, language, version, ownerId, content)
+fun Snippet.toResponse(content: String) =
+    SnippetResponse(id, name, description, language, version, ownerId, lintStatus, content)
 
-fun Snippet.toSummary() = SnippetSummary(id, name, description, language, version, ownerId)
+fun Snippet.toSummary() = SnippetSummary(id, name, description, language, version, ownerId, lintStatus)
 
 // un campo en null no se valida: en el update significa "dejalo como estaba"
 private fun requireNotBlank(vararg fields: Pair<String, String?>) {

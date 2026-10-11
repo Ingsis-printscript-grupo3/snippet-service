@@ -72,7 +72,10 @@ class SnippetController(
         @RequestParam(defaultValue = "ALL") relation: Relation,
         @RequestParam(required = false) name: String?,
         @RequestParam(required = false) language: String?,
-    ): List<SnippetSummary> = service.list(userId, relation, name, language)
+        @RequestParam(required = false) lintStatus: LintStatus?,
+        @RequestParam(defaultValue = "NAME") sort: SnippetSort,
+        @RequestParam(defaultValue = "ASC") direction: SortDirection,
+    ): List<SnippetSummary> = service.list(userId, SnippetQuery(relation, name, language, lintStatus, sort, direction))
 
     // US6
     @GetMapping("/{id}")
