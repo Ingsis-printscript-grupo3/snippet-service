@@ -9,11 +9,31 @@ interface LanguageService {
         version: String,
         content: String,
     ): ValidationResult
+
+    // corre las reglas predeterminadas del lenguaje. Cuando exista la US14 va a recibir las del owner
+    fun lint(
+        version: String,
+        content: String,
+    ): LintResult
 }
 
 data class ValidationResult(
     val valid: Boolean,
     val errors: List<SnippetError>,
+)
+
+// warnings son reglas de estilo incumplidas; errors, que el snippet ni siquiera parsea
+data class LintResult(
+    val warnings: List<LintWarning>,
+    val errors: List<SnippetError>,
+) {
+    val compliant: Boolean get() = warnings.isEmpty() && errors.isEmpty()
+}
+
+data class LintWarning(
+    val message: String,
+    val line: Int,
+    val column: Int,
 )
 
 // que regla se incumplio y donde: es lo que piden las US 1 a 4

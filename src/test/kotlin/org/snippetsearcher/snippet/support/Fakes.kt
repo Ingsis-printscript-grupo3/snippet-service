@@ -3,6 +3,8 @@ package org.snippetsearcher.snippet.support
 import org.snippetsearcher.snippet.common.DownstreamException
 import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.language.LanguageService
+import org.snippetsearcher.snippet.language.LintResult
+import org.snippetsearcher.snippet.language.LintWarning
 import org.snippetsearcher.snippet.language.PRINTSCRIPT
 import org.snippetsearcher.snippet.language.SnippetError
 import org.snippetsearcher.snippet.language.ValidationResult
@@ -15,10 +17,32 @@ import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
 import java.util.UUID
 
+const val OTHER_LANGUAGE = "otrolenguaje"
+
 // reemplazan a los tres servicios de afuera en los tests: los de controller corren sin red
 
-// un snippet es invalido si contiene la palabra "error", y el error siempre esta en la linea 2, columna 11
+// un snippet es invalido si contiene la palabra "error", y el error siempre esta en la linea 2, columna 11.
+// No cumple las reglas de linteo si tiene un "_": la regla predeterminada de PrintScript pide camelCase
 class FakeLanguageService : LanguageService {
+    var failLint = false
+
+    override fun lint(
+        version: String,
+        content: String,
+    ): LintResult {
+        if (failLint) throw DownstreamException("printscript-service")
+        val warnings =
+            if (content.contains(
+                    "_",
+                )
+            ) {
+                listOf(LintWarning("Identifier must be camel case", 1, 5))
+            } else {
+                emptyList()
+            }
+        return LintResult(warnings, emptyList())
+    }
+
     override fun validate(
         version: String,
         content: String,
@@ -103,8 +127,13 @@ class FakeContentStore : ContentStore {
 @TestConfiguration
 class FakeCollaborators {
     @Bean
+    fun fakeLanguageService(): FakeLanguageService = FakeLanguageService()
+
+    @Bean
     @Primary
-    fun fakeLanguageRegistry(): LanguageRegistry = LanguageRegistry(mapOf(PRINTSCRIPT to FakeLanguageService()))
+    fun fakeLanguageRegistry(language: FakeLanguageService): LanguageRegistry =
+        // un segundo lenguaje, solo para poder probar el orden por lenguaje del listado
+        LanguageRegistry(mapOf(PRINTSCRIPT to language, OTHER_LANGUAGE to language))
 
     @Bean
     @Primary

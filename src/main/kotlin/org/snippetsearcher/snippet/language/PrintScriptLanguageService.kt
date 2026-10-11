@@ -10,7 +10,7 @@ import org.springframework.web.client.body
 
 const val PRINTSCRIPT = "printscript"
 
-// habla con el printscript-service. Un snippet invalido vuelve 200 con valid=false;
+// habla con el printscript-service. Un snippet invalido o que no cumple las reglas vuelve 200 con el detalle;
 // un 400 es que pedimos algo imposible, como una version que no existe
 class PrintScriptLanguageService(
     private val client: RestClient,
@@ -18,16 +18,27 @@ class PrintScriptLanguageService(
     override fun validate(
         version: String,
         content: String,
-    ): ValidationResult =
+    ): ValidationResult = post("/validations", SnippetRequest(PRINTSCRIPT, version, content))
+
+    // sin rules: el printscript-service corre las predeterminadas
+    override fun lint(
+        version: String,
+        content: String,
+    ): LintResult = post("/lintings", SnippetRequest(PRINTSCRIPT, version, content))
+
+    private inline fun <reified T : Any> post(
+        path: String,
+        request: SnippetRequest,
+    ): T =
         callService("printscript-service") {
             try {
                 client
                     .post()
-                    .uri("/validations")
+                    .uri(path)
                     .contentType(MediaType.APPLICATION_JSON)
-                    .body(ValidationRequest(PRINTSCRIPT, version, content))
+                    .body(request)
                     .retrieve()
-                    .body<ValidationResult>()!!
+                    .body<T>()!!
             } catch (e: HttpClientErrorException) {
                 if (e.statusCode != HttpStatus.BAD_REQUEST) throw e
                 val message = runCatching { e.getResponseBodyAs(RemoteError::class.java)?.error }.getOrNull()
@@ -35,7 +46,7 @@ class PrintScriptLanguageService(
             }
         }
 
-    data class ValidationRequest(
+    data class SnippetRequest(
         val language: String,
         val version: String,
         val content: String,

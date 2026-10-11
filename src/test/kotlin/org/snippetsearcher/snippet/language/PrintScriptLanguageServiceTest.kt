@@ -16,6 +16,7 @@ import org.springframework.test.web.client.response.MockRestResponseCreators.wit
 import org.springframework.web.client.RestClient
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class PrintScriptLanguageServiceTest {
@@ -75,5 +76,34 @@ class PrintScriptLanguageServiceTest {
 
         val error = assertFailsWith<DownstreamException> { service.validate("1.1", "println(1);") }
         assertEquals("printscript-service", error.service)
+    }
+
+    @Test
+    fun `lint sends the snippet without rules so the default ones run`() {
+        server
+            .expect(requestTo("http://printscript/lintings"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.content").value("let mi_var: number = 1;"))
+            .andExpect(jsonPath("$.rules").doesNotExist())
+            .andRespond(
+                withSuccess(
+                    """{"warnings":[{"message":"Identifier must be camel case","line":1,"column":5}],"errors":[]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val result = service.lint("1.1", "let mi_var: number = 1;")
+
+        assertEquals(listOf(LintWarning("Identifier must be camel case", 1, 5)), result.warnings)
+        assertFalse(result.compliant)
+    }
+
+    @Test
+    fun `a snippet without warnings nor errors is compliant`() {
+        server
+            .expect(requestTo("http://printscript/lintings"))
+            .andRespond(withSuccess("""{"warnings":[],"errors":[]}""", MediaType.APPLICATION_JSON))
+
+        assertTrue(service.lint("1.1", "println(1);").compliant)
     }
 }
