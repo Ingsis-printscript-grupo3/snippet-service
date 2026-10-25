@@ -1,3 +1,5 @@
+import io.gitlab.arturbosch.detekt.getSupportedKotlinVersion
+
 plugins {
     kotlin("jvm") version "2.3.21"
     kotlin("plugin.spring") version "2.3.21"
@@ -6,6 +8,7 @@ plugins {
     id("org.springframework.boot") version "4.1.1"
     id("io.spring.dependency-management") version "1.1.7"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+    id("io.gitlab.arturbosch.detekt") version "1.23.7"
 }
 
 group = "org.snippetsearcher"
@@ -59,4 +62,17 @@ tasks.withType<Test> {
 // el ktlint que trae el plugin por defecto (1.0.1) no entiende el compilador de Kotlin 2.3
 ktlint {
     version.set("1.7.1")
+}
+
+detekt {
+    config.setFrom("$rootDir/config/detekt/detekt.yml")
+    buildUponDefaultConfig = true
+}
+
+configurations.matching { it.name == "detekt" }.all {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlin") {
+            useVersion(getSupportedKotlinVersion())
+        }
+    }
 }

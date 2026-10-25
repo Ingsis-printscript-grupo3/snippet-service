@@ -22,7 +22,7 @@ class ApiExceptionHandler {
 
     @ExceptionHandler(HttpMessageNotReadableException::class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
-    fun unreadableBody(e: HttpMessageNotReadableException): ErrorResponse =
+    fun unreadableBody(): ErrorResponse =
         ErrorResponse("El body no es válido: tiene que traer name, language, version y content")
 
     @ExceptionHandler(MissingServletRequestParameterException::class)

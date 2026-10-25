@@ -23,7 +23,33 @@ Levanta en el puerto `8080`. Necesita la base y los otros servicios arriba (por 
 ./gradlew check
 ```
 
-Corre ktlint y los tests. Es lo mismo que corre el CI en cada PR contra `main` o `dev`.
+Corre ktlint y los tests. Es lo mismo que corre el CI en cada PR contra `dev` o `prod`.
+
+## Publicación de la imagen (CD)
+
+Cada push/merge a `dev` o a `prod` construye la imagen Docker y la sube a
+`ghcr.io/ingsis-printscript-grupo3/snippet-service` con dos tags:
+
+| Tag | Qué es |
+| --- | --- |
+| `dev` o `prod` | La última imagen de esa rama. Se pisa en cada merge |
+| el hash del commit (`sha`) | Esa imagen exacta. Inmutable, sirve para rollbacks |
+
+```bash
+docker pull ghcr.io/ingsis-printscript-grupo3/snippet-service:dev
+```
+
+## Branching Strategy
+
+Seguimos una estrategia basada en ramas cortas y dos ambientes principales:
+
+- **Rama default (`prod`)**: Refleja lo que está desplegado en el ambiente de producción.
+- **Rama de integración (`dev`)**: Integra los cambios continuos y se despliega en el ambiente de desarrollo.
+- **Ramas de trabajo cortas** (`feat/`, `fix/`, `refactor/`): Salen de `dev` y entran a `dev` exclusivamente mediante Pull Request.
+- **Releases a producción**: Se realizan mediante PRs desde `dev` hacia `prod`.
+- **Criterios de Merge**:
+  - Al menos 1 aprobación requerida (`Require approvals`).
+  - Checks automáticos de CI en verde (`./gradlew check`).
 
 ## Docker
 

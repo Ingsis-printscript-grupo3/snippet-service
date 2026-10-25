@@ -34,29 +34,27 @@ class SnippetService(
         request.requireNoBlanks()
         validate(request.language, request.version, request.content)
 
-        val now = Instant.now()
-        val snippet =
-            repository.save(
-                Snippet(
-                    id = UUID.randomUUID(),
-                    name = request.name,
-                    description = request.description,
-                    language = request.language,
-                    version = request.version,
-                    ownerId = userId,
-                    createdAt = now,
-                    updatedAt = now,
-                    lintStatus = lintStatusOf(request.language, request.version, request.content),
-                ),
-            )
+        val lintStatus = lintStatusOf(request.language, request.version, request.content)
+        val snippet = repository.save(request.toSnippet(userId, lintStatus))
         contents.put(snippet.contentKey, request.content)
+        grantOwnerOrDropContent(snippet, userId)
+        return snippet.toResponse(request.content)
+    }
+
+    // la fila se deshace sola con el rollback, el contenido del bucket no. Se atrapa cualquier falla
+    // a proposito: sea cual sea, el contenido queda huerfano, y la excepcion se vuelve a tirar igual
+    @Suppress("TooGenericExceptionCaught")
+    private fun grantOwnerOrDropContent(
+        snippet: Snippet,
+        userId: String,
+    ) {
         try {
             permissions.grantOwner(snippet.id, userId)
         } catch (e: RuntimeException) {
-            deleteContentQuietly(snippet.contentKey)
+            runCatching { contents.delete(snippet.contentKey) }
+                .onFailure { log.warn("No se pudo borrar el contenido huerfano {}", snippet.contentKey, it) }
             throw e
         }
-        return snippet.toResponse(request.content)
     }
 
     @Transactional
@@ -175,9 +173,4 @@ class SnippetService(
         snippet: Snippet,
         userId: String,
     ): Access = if (snippet.ownerId == userId) Access.OWNER else permissions.check(snippet.id, userId)
-
-    private fun deleteContentQuietly(key: String) {
-        runCatching { contents.delete(key) }
-            .onFailure { log.warn("No se pudo borrar el contenido huerfano {}", key, it) }
-    }
 }
