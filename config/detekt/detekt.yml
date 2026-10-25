@@ -1,0 +1,16 @@
+complexity:
+
+ LongMethod:
+    active: true
+    threshold: 21
+    excludes: ['**/test/**']
+
+performance:
+  # runApplication(*args) es la forma de arrancar Spring
+  SpreadOperator:
+    active: false
+
+style:
+  # los tests mandan el JSON en una sola linea
+  MaxLineLength:
+    excludes: ['**/test/**']
