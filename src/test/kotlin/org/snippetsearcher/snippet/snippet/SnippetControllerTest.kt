@@ -7,7 +7,9 @@ import org.snippetsearcher.snippet.common.USER_HEADER
 import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.support.FakeCollaborators
 import org.snippetsearcher.snippet.support.FakeContentStore
+import org.snippetsearcher.snippet.support.FakeLanguageService
 import org.snippetsearcher.snippet.support.FakePermissionClient
+import org.snippetsearcher.snippet.support.OTHER_LANGUAGE
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc
@@ -41,12 +43,14 @@ class SnippetControllerTest(
     @Autowired private val repository: SnippetRepository,
     @Autowired private val permissions: FakePermissionClient,
     @Autowired private val contents: FakeContentStore,
+    @Autowired private val language: FakeLanguageService,
 ) {
     @BeforeEach
     fun cleanUp() {
         repository.deleteAll()
         permissions.reset()
         contents.contents.clear()
+        language.failLint = false
     }
 
     @Test
@@ -284,9 +288,119 @@ class SnippetControllerTest(
         assertEquals(Access.NONE, permissions.accessOf(id, OWNER))
     }
 
+    @Test
+    fun `a new snippet says whether it complies with the lint rules`() {
+        mockMvc
+            .post("/snippets") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """{"name":"ok","language":"printscript","version":"1.1","content":"let miVar: number = 1;"}"""
+            }.andExpect { jsonPath("$.lintStatus") { value("COMPLIANT") } }
+        mockMvc
+            .post("/snippets") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content =
+                    """{"name":"mal","language":"printscript","version":"1.1","content":"let mi_var: number = 1;"}"""
+            }.andExpect { jsonPath("$.lintStatus") { value("NOT_COMPLIANT") } }
+    }
+
+    @Test
+    fun `if linting fails the snippet is still created as pending`() {
+        language.failLint = true
+
+        mockMvc
+            .post("/snippets") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"name":"x","language":"printscript","version":"1.1","content":"println(1);"}"""
+            }.andExpect {
+                status { isCreated() }
+                jsonPath("$.lintStatus") { value("PENDING") }
+            }
+        assertEquals(1, repository.count())
+    }
+
+    @Test
+    fun `updating the content lints the snippet again`() {
+        val id = createSnippet("suma", "println(1);")
+
+        mockMvc
+            .patch("/snippets/$id") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"content":"let mi_var: number = 1;"}"""
+            }.andExpect { jsonPath("$.lintStatus") { value("NOT_COMPLIANT") } }
+
+        assertEquals(LintStatus.NOT_COMPLIANT, repository.findById(id).get().lintStatus)
+    }
+
+    @Test
+    fun `the list shows the lint status and filters by it`() {
+        createSnippet("cumple", "println(1);")
+        val failing = createSnippet("no cumple", "let mi_var: number = 1;")
+
+        mockMvc
+            .get("/snippets") { header(USER_HEADER, OWNER) }
+            .andExpect {
+                jsonPath("$[0].name") { value("cumple") }
+                jsonPath("$[0].lintStatus") { value("COMPLIANT") }
+            }
+        mockMvc
+            .get("/snippets") {
+                header(USER_HEADER, OWNER)
+                param("lintStatus", "NOT_COMPLIANT")
+            }.andExpect {
+                jsonPath("$.length()") { value(1) }
+                jsonPath("$[0].id") { value(failing.toString()) }
+            }
+    }
+
+    @Test
+    fun `the list can be sorted by lint status`() {
+        createSnippet("a", "let mi_var: number = 1;")
+        createSnippet("b", "println(1);")
+
+        mockMvc
+            .get("/snippets") {
+                header(USER_HEADER, OWNER)
+                param("sort", "LINT_STATUS")
+            }.andExpect {
+                jsonPath("$[0].name") { value("b") }
+                jsonPath("$[1].name") { value("a") }
+            }
+    }
+
+    @Test
+    fun `the list can be sorted by language in descending order`() {
+        createSnippet("a", "println(1);")
+        createSnippet("b", "println(2);", language = OTHER_LANGUAGE)
+
+        mockMvc
+            .get("/snippets") {
+                header(USER_HEADER, OWNER)
+                param("sort", "LANGUAGE")
+                param("direction", "DESC")
+            }.andExpect {
+                jsonPath("$[0].language") { value("printscript") }
+                jsonPath("$[1].language") { value(OTHER_LANGUAGE) }
+            }
+    }
+
+    @Test
+    fun `an unknown sort field returns 400`() {
+        mockMvc
+            .get("/snippets") {
+                header(USER_HEADER, OWNER)
+                param("sort", "fecha")
+            }.andExpect { status { isBadRequest() } }
+    }
+
     private fun createSnippet(
         name: String,
         content: String,
         owner: String = OWNER,
-    ): UUID = service.create(owner, CreateSnippetRequest(name, "", "printscript", "1.1", content)).id
+        language: String = "printscript",
+    ): UUID = service.create(owner, CreateSnippetRequest(name, "", language, "1.1", content)).id
 }
