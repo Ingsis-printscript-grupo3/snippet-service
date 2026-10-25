@@ -65,11 +65,11 @@ ktlint {
 }
 
 detekt {
-    config.setFrom("$rootDir/config/detekt.yml/detekt.yml.yml")
+    config.setFrom("$rootDir/config/detekt/detekt.yml")
     buildUponDefaultConfig = true
 }
 
-configurations.matching { it.name == "detekt.yml" }.all {
+configurations.matching { it.name == "detekt" }.all {
     resolutionStrategy.eachDependency {
         if (requested.group == "org.jetbrains.kotlin") {
             useVersion(getSupportedKotlinVersion())
