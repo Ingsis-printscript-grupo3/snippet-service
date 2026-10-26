@@ -56,7 +56,7 @@ services:
         GITHUB_ACTOR: ${GITHUB_ACTOR:?falta GITHUB_ACTOR en .env}
         GITHUB_TOKEN: ${GITHUB_TOKEN:?falta GITHUB_TOKEN en .env}
     ports:
-      - "8082:8080"
+      - "8080:8080"
 
   permission-service:
     build: ../permission-service
