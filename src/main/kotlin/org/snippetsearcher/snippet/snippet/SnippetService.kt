@@ -1,13 +1,13 @@
 package org.snippetsearcher.snippet.snippet
 
 import org.slf4j.LoggerFactory
+import org.snippetsearcher.snippet.common.DownstreamException
 import org.snippetsearcher.snippet.common.ForbiddenException
 import org.snippetsearcher.snippet.common.InvalidSnippetException
 import org.snippetsearcher.snippet.common.SnippetNotFoundException
 import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.permission.PermissionClient
-import org.snippetsearcher.snippet.permission.Relation
 import org.snippetsearcher.snippet.storage.ContentStore
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
@@ -34,28 +34,27 @@ class SnippetService(
         request.requireNoBlanks()
         validate(request.language, request.version, request.content)
 
-        val now = Instant.now()
-        val snippet =
-            repository.save(
-                Snippet(
-                    id = UUID.randomUUID(),
-                    name = request.name,
-                    description = request.description,
-                    language = request.language,
-                    version = request.version,
-                    ownerId = userId,
-                    createdAt = now,
-                    updatedAt = now,
-                ),
-            )
+        val lintStatus = lintStatusOf(request.language, request.version, request.content)
+        val snippet = repository.save(request.toSnippet(userId, lintStatus))
         contents.put(snippet.contentKey, request.content)
+        grantOwnerOrDropContent(snippet, userId)
+        return snippet.toResponse(request.content)
+    }
+
+    // la fila se deshace sola con el rollback, el contenido del bucket no. Se atrapa cualquier falla
+    // a proposito: sea cual sea, el contenido queda huerfano, y la excepcion se vuelve a tirar igual
+    @Suppress("TooGenericExceptionCaught")
+    private fun grantOwnerOrDropContent(
+        snippet: Snippet,
+        userId: String,
+    ) {
         try {
             permissions.grantOwner(snippet.id, userId)
         } catch (e: RuntimeException) {
-            deleteContentQuietly(snippet.contentKey)
+            runCatching { contents.delete(snippet.contentKey) }
+                .onFailure { log.warn("No se pudo borrar el contenido huerfano {}", snippet.contentKey, it) }
             throw e
         }
-        return snippet.toResponse(request.content)
     }
 
     @Transactional
@@ -74,15 +73,15 @@ class SnippetService(
         val version = request.version ?: snippet.version
         val content = request.content ?: contents.get(snippet.contentKey)
         // cambiar el codigo, el lenguaje o la version puede romper el snippet: se revalida
-        if (request.content != null || language != snippet.language || version != snippet.version) {
-            validate(language, version, content)
-        }
+        val changesCode = request.content != null || language != snippet.language || version != snippet.version
+        if (changesCode) validate(language, version, content)
 
         request.name?.let { snippet.name = it }
         request.description?.let { snippet.description = it }
         snippet.language = language
         snippet.version = version
         snippet.updatedAt = Instant.now()
+        if (changesCode) snippet.lintStatus = lintStatusOf(language, version, content)
         if (request.content != null) contents.put(snippet.contentKey, content)
         return snippet.toResponse(content)
     }
@@ -100,20 +99,15 @@ class SnippetService(
     @Transactional(readOnly = true)
     fun list(
         userId: String,
-        relation: Relation,
-        name: String?,
-        language: String?,
+        query: SnippetQuery,
     ): List<SnippetSummary> {
-        val ids = permissions.snippetIds(userId, relation)
+        val ids = permissions.snippetIds(userId, query.relation)
         if (ids.isEmpty()) return emptyList()
         return repository
             .findAllById(ids)
-            .asSequence()
-            .filter { name.isNullOrBlank() || it.name.contains(name, ignoreCase = true) }
-            .filter { language.isNullOrBlank() || it.language.equals(language, ignoreCase = true) }
-            .sortedBy { it.name.lowercase() }
+            .filter { query.matches(it) }
+            .sortedWith(query.comparator())
             .map { it.toSummary() }
-            .toList()
     }
 
     @Transactional
@@ -141,6 +135,29 @@ class SnippetService(
         if (!result.valid) throw InvalidSnippetException(result.errors)
     }
 
+    // lintear no bloquea: el snippet ya es valido. Si el printscript-service no responde queda PENDING
+    // y se puede volver a lintear despues, sin perder el snippet que el usuario acaba de guardar
+    private fun lintStatusOf(
+        language: String,
+        version: String,
+        content: String,
+    ): LintStatus =
+        try {
+            if (languages
+                    .get(
+                        language,
+                    ).lint(version, content)
+                    .compliant
+            ) {
+                LintStatus.COMPLIANT
+            } else {
+                LintStatus.NOT_COMPLIANT
+            }
+        } catch (e: DownstreamException) {
+            log.warn("No se pudo lintear el snippet, queda {}", LintStatus.PENDING, e)
+            LintStatus.PENDING
+        }
+
     // sin ningun permiso es 404 y no 403: no se le confirma a nadie que el snippet existe
     private fun findWithAccess(
         id: UUID,
@@ -156,9 +173,4 @@ class SnippetService(
         snippet: Snippet,
         userId: String,
     ): Access = if (snippet.ownerId == userId) Access.OWNER else permissions.check(snippet.id, userId)
-
-    private fun deleteContentQuietly(key: String) {
-        runCatching { contents.delete(key) }
-            .onFailure { log.warn("No se pudo borrar el contenido huerfano {}", key, it) }
-    }
 }

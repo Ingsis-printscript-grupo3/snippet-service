@@ -1,0 +1,23 @@
+complexity:
+  # mismo limite que la libreria
+  LongMethod:
+    active: true
+    threshold: 21
+    excludes: ['**/test/**']
+
+  LongParameterList:
+    active: true
+    # los parametros de un endpoint los arma Spring desde el pedido: agruparlos en un objeto no simplifica nada
+    ignoreAnnotatedParameter: ['CurrentUser', 'RequestParam', 'RequestPart', 'PathVariable', 'RequestBody']
+    # una entidad tiene un parametro por columna
+    ignoreAnnotated: ['Entity']
+
+performance:
+  # runApplication(*args) es la forma de arrancar Spring
+  SpreadOperator:
+    active: false
+
+style:
+  # los tests mandan el JSON en una sola linea
+  MaxLineLength:
+    excludes: ['**/test/**']

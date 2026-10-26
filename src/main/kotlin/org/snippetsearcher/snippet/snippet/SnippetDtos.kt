@@ -1,6 +1,7 @@
 package org.snippetsearcher.snippet.snippet
 
 import org.snippetsearcher.snippet.common.InvalidRequestException
+import java.time.Instant
 import java.util.UUID
 
 // US1 y US3: el mismo pedido llega como JSON desde el editor o armado desde un archivo subido
@@ -13,6 +14,15 @@ data class CreateSnippetRequest(
 ) {
     fun requireNoBlanks() {
         requireNotBlank("name" to name, "language" to language, "version" to version, "content" to content)
+    }
+
+    // el lintStatus lo calcula el service: hace falta llamar al lenguaje
+    fun toSnippet(
+        ownerId: String,
+        lintStatus: LintStatus,
+    ): Snippet {
+        val now = Instant.now()
+        return Snippet(UUID.randomUUID(), name, description, language, version, ownerId, now, now, lintStatus)
     }
 }
 
@@ -36,6 +46,7 @@ data class SnippetResponse(
     val language: String,
     val version: String,
     val ownerId: String,
+    val lintStatus: LintStatus,
     val content: String,
 )
 
@@ -47,11 +58,13 @@ data class SnippetSummary(
     val language: String,
     val version: String,
     val ownerId: String,
+    val lintStatus: LintStatus,
 )
 
-fun Snippet.toResponse(content: String) = SnippetResponse(id, name, description, language, version, ownerId, content)
+fun Snippet.toResponse(content: String) =
+    SnippetResponse(id, name, description, language, version, ownerId, lintStatus, content)
 
-fun Snippet.toSummary() = SnippetSummary(id, name, description, language, version, ownerId)
+fun Snippet.toSummary() = SnippetSummary(id, name, description, language, version, ownerId, lintStatus)
 
 // un campo en null no se valida: en el update significa "dejalo como estaba"
 private fun requireNotBlank(vararg fields: Pair<String, String?>) {
