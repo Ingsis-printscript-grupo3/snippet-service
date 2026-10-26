@@ -19,7 +19,7 @@ services:
       DB_URL: jdbc:postgresql://snippet-db:5432/snippets
       DB_USER: snippet
       DB_PASSWORD: snippet
-      PRINTSCRIPT_SERVICE_URL: http://printscript-service:8082
+      PRINTSCRIPT_SERVICE_URL: http://printscript-service:8080
       PERMISSION_SERVICE_URL: http://permission-service:8081
       ASSET_SERVICE_URL: http://asset-service:8080
     depends_on:
