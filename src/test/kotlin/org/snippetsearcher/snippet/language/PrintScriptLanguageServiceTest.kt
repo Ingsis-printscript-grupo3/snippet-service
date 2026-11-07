@@ -25,6 +25,11 @@ class PrintScriptLanguageServiceTest {
     private val service = PrintScriptLanguageService(builder.build())
 
     @Test
+    fun `printscript files use the ps extension`() {
+        assertEquals("ps", service.extension)
+    }
+
+    @Test
     fun `sends the snippet to validations and reads a valid result`() {
         server
             .expect(requestTo("http://printscript/validations"))
