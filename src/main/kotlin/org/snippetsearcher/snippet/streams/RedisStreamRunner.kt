@@ -65,7 +65,12 @@ class RedisStreamRunner(
     fun pollAll() {
         handlers.forEach { handler ->
             runCatching { pollHandler(handler) }
-                .onFailure { log.warn("Error polling stream {}: {}", handler.stream, it.message) }
+                .onFailure {
+                    log.warn("Error polling stream {}: {}", handler.stream, it.message)
+                    // NOGROUP: Redis no tiene el stream o el grupo, porque se reinicio sin datos o porque no
+                    // estaba listo cuando arranco este servicio. Se recrea y el proximo poll sigue solo
+                    if (it.mentions("NOGROUP")) ensureGroup(handler.stream, handler.group)
+                }
         }
     }
 
@@ -151,7 +156,8 @@ class RedisStreamRunner(
                 conn.streamCommands().xGroupCreate(stream.toByteArray(), group, ReadOffset.from("0"), true)
             }
         } catch (ex: RuntimeException) {
-            if (ex.message?.contains("BUSYGROUP") != true && ex.cause?.message?.contains("BUSYGROUP") != true) {
+            // BUSYGROUP es que el grupo ya existia: es lo esperado en cada arranque menos el primero
+            if (!ex.mentions("BUSYGROUP")) {
                 log.warn("No se pudo crear grupo {} en {}: {}", group, stream, ex.message)
             }
         }
@@ -161,3 +167,7 @@ class RedisStreamRunner(
         private const val BATCH_SIZE = 10L
     }
 }
+
+// el error de Redis suele venir envuelto: se busca en toda la cadena de causas
+private fun Throwable.mentions(text: String): Boolean =
+    generateSequence(this) { it.cause }.any { it.message?.contains(text) == true }
