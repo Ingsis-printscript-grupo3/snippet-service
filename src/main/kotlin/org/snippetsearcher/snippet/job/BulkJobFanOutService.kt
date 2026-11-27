@@ -13,6 +13,7 @@ import org.snippetsearcher.snippet.streams.FormatRequestMessage
 import org.snippetsearcher.snippet.streams.LintRequestMessage
 import org.snippetsearcher.snippet.streams.StreamNames
 import org.snippetsearcher.snippet.streams.StreamProducer
+import org.snippetsearcher.snippet.streams.publishAfterCommit
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.UUID
@@ -26,6 +27,10 @@ class BulkJobFanOutService(
     private val ruleService: RuleService,
     private val producer: StreamProducer,
 ) {
+    // Los pedidos salen a Redis recien despues del commit. Un worker puede contestar en milisegundos, y si
+    // el resultado llega antes de que el item exista en la base se descarta y el job no termina nunca.
+    // Si la publicacion falla, la excepcion sube, el mensaje no se confirma y el reparto se repite:
+    // los items ya existen y un pedido duplicado se ignora porque su item ya no esta pendiente
     @Transactional
     fun fanOut(msg: BulkJobRequestMessage) {
         val job = store.findJob(msg.jobId) ?: return
@@ -37,13 +42,14 @@ class BulkJobFanOutService(
                 snippets.findAllById(ownedIds).filter { it.language == msg.language }
             }
         job.total = targets.size
-        if (targets.isEmpty()) {
-            job.status = BulkJobStatus.DONE
-            return
+        if (targets.isNotEmpty()) {
+            val type = RuleType.valueOf(msg.type)
+            val rulesMap = ruleService.buildRulesMap(msg.userId, msg.language, type)
+            targets.forEach { dispatchSnippet(job.id, msg.userId, type, it, rulesMap) }
         }
-        val type = RuleType.valueOf(msg.type)
-        val rulesMap = ruleService.buildRulesMap(msg.userId, msg.language, type)
-        targets.forEach { dispatchSnippet(job.id, msg.userId, type, it, rulesMap) }
+        // sin snippets, o en un reparto repetido donde ya estaban todos resueltos, no va a llegar ningun
+        // resultado que cierre el job: se cierra aca
+        job.closeIfResolved()
     }
 
     private fun dispatchSnippet(
@@ -53,7 +59,7 @@ class BulkJobFanOutService(
         snippet: Snippet,
         rulesMap: Map<String, Any?>,
     ) {
-        store.ensurePendingItem(jobId, snippet.id)
+        if (!store.claimPendingItem(jobId, snippet.id)) return
         val content = contents.get(snippet.contentKey)
         when (type) {
             RuleType.LINT -> publishLint(jobId, userId, snippet, content, rulesMap)
@@ -80,7 +86,7 @@ class BulkJobFanOutService(
                 content = content,
                 rules = rulesMap,
             )
-        producer.publish(StreamNames.LINT_REQUESTS, msg)
+        producer.publishAfterCommit(StreamNames.LINT_REQUESTS, msg)
     }
 
     private fun publishFormat(
@@ -101,6 +107,6 @@ class BulkJobFanOutService(
                 content = content,
                 rules = rulesMap,
             )
-        producer.publish(StreamNames.FORMAT_REQUESTS, msg)
+        producer.publishAfterCommit(StreamNames.FORMAT_REQUESTS, msg)
     }
 }

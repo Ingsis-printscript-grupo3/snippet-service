@@ -35,86 +35,110 @@ class RuleControllerTest(
     }
 
     @Test
-    fun `get format rules returns defaults when user has no overrides`() {
+    fun `get formatting rules returns defaults in the ui shape`() {
         mockMvc
-            .get("/rules/format?language=printscript") {
+            .get("/rules/formatting?language=printscript") {
                 header("X-User-Id", "user-1")
             }.andExpect {
                 status { isOk() }
-                jsonPath("$[?(@.name == 'enforce-spacing-around-equals')].enabled") { value(false) }
+                jsonPath(
+                    "$[?(@.name == 'enforce-spacing-around-equals')].id",
+                ) { value("enforce-spacing-around-equals") }
+                jsonPath("$[?(@.name == 'enforce-spacing-around-equals')].isActive") { value(false) }
+                // reglas enteras salen como number para que la UI muestre el campo numérico
+                jsonPath("$[?(@.name == 'line-breaks-after-println')].value") { value(0) }
             }
     }
 
     @Test
-    fun `put format rules saves overrides per user and enqueues bulk job`() {
+    fun `format and lint stay as aliases of formatting and linting`() {
         mockMvc
-            .put("/rules/format?language=printscript") {
+            .get("/rules/format") { header("X-User-Id", "user-1") }
+            .andExpect { status { isOk() } }
+        mockMvc
+            .get("/rules/lint") { header("X-User-Id", "user-1") }
+            .andExpect { status { isOk() } }
+        mockMvc
+            .get("/rules/unknown") { header("X-User-Id", "user-1") }
+            .andExpect { status { isBadRequest() } }
+    }
+
+    @Test
+    fun `put formatting rules returns saved rules, job location, and enqueues bulk job per user`() {
+        mockMvc
+            .put("/rules/formatting?language=printscript") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
                 content =
                     """
-                    [{"name":"enforce-spacing-around-equals","enabled":true},
-                     {"name":"line-breaks-after-println","enabled":true,"value":"1"}]
+                    [{"id":"enforce-spacing-around-equals","name":"enforce-spacing-around-equals","isActive":true},
+                     {"id":"line-breaks-after-println","name":"line-breaks-after-println","isActive":true,"value":1}]
                     """.trimIndent()
             }.andExpect {
-                status { isAccepted() }
-                jsonPath("$.jobId") { exists() }
+                status { isOk() }
+                header { exists(JOB_ID_HEADER) }
+                header { string("Location", org.hamcrest.Matchers.startsWith("/jobs/")) }
+                jsonPath("$[?(@.name == 'enforce-spacing-around-equals')].isActive") { value(true) }
+                jsonPath("$[?(@.name == 'line-breaks-after-println')].value") { value(1) }
             }
 
         assertEquals(1, producer.published.size)
         assertEquals(StreamNames.BULK_JOB_REQUESTS, producer.published.first().first)
 
         mockMvc
-            .get("/rules/format?language=printscript") {
+            .get("/rules/formatting?language=printscript") {
                 header("X-User-Id", "user-2")
             }.andExpect {
                 status { isOk() }
-                jsonPath("$[?(@.name == 'enforce-spacing-around-equals')].enabled") { value(false) }
+                jsonPath("$[?(@.name == 'enforce-spacing-around-equals')].isActive") { value(false) }
             }
     }
 
     @Test
     fun `put rejects unknown rule, out of range value, and incompatible rules`() {
         mockMvc
-            .put("/rules/format") {
+            .put("/rules/formatting") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
-                content = """[{"name":"unknown-rule","enabled":true}]"""
+                content = """[{"name":"unknown-rule","isActive":true}]"""
             }.andExpect { status { isBadRequest() } }
 
         mockMvc
-            .put("/rules/format") {
+            .put("/rules/formatting") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
-                content = """[{"name":"line-breaks-after-println","enabled":true,"value":"5"}]"""
+                content = """[{"name":"line-breaks-after-println","isActive":true,"value":5}]"""
             }.andExpect { status { isBadRequest() } }
 
         mockMvc
-            .put("/rules/format") {
+            .put("/rules/formatting") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
                 content =
                     """
-                    [{"name":"if-brace-same-line","enabled":true},
-                     {"name":"if-brace-below-line","enabled":true}]
+                    [{"name":"if-brace-same-line","isActive":true},
+                     {"name":"if-brace-below-line","isActive":true}]
                     """.trimIndent()
             }.andExpect { status { isBadRequest() } }
     }
 
     @Test
-    fun `put lint rules validates enum values`() {
+    fun `put linting rules validates enum values`() {
         mockMvc
-            .put("/rules/lint") {
+            .put("/rules/linting") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
-                content = """[{"name":"identifier_format","enabled":true,"value":"kebab case"}]"""
+                content = """[{"name":"identifier_format","isActive":true,"value":"kebab case"}]"""
             }.andExpect { status { isBadRequest() } }
 
         mockMvc
-            .put("/rules/lint") {
+            .put("/rules/linting") {
                 header("X-User-Id", "user-1")
                 contentType = MediaType.APPLICATION_JSON
-                content = """[{"name":"identifier_format","enabled":true,"value":"snake case"}]"""
-            }.andExpect { status { isAccepted() } }
+                content = """[{"name":"identifier_format","isActive":true,"value":"snake case"}]"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$[?(@.name == 'identifier_format')].value") { value("snake case") }
+            }
     }
 }

@@ -21,5 +21,7 @@ class CorsConfig(
             .allowedMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             // X-User-Id no es un header "simple": el navegador lo pregunta antes con un OPTIONS
             .allowedHeaders("*")
+            // sin esto el navegador no deja leer el header del job que devuelve PUT /rules/{type}
+            .exposedHeaders("Location", "X-Job-Id")
     }
 }

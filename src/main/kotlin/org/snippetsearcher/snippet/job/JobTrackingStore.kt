@@ -11,14 +11,15 @@ class JobTrackingStore(
 ) {
     fun findJob(jobId: UUID): BulkJob? = jobs.findByIdOrNull(jobId)
 
-    fun ensurePendingItem(
+    // crea el item si no existe y dice si todavia hay que procesarlo. Da false cuando el reparto se repite
+    // (un reinicio a mitad de camino) y ese snippet ya se habia resuelto en el intento anterior
+    fun claimPendingItem(
         jobId: UUID,
         snippetId: UUID,
-    ) {
+    ): Boolean {
         val id = BulkJobItemId(jobId, snippetId)
-        if (!items.existsById(id)) {
-            items.save(BulkJobItem(id, BulkJobItemStatus.PENDING))
-        }
+        val item = items.findByIdOrNull(id) ?: items.save(BulkJobItem(id, BulkJobItemStatus.PENDING))
+        return item.status == BulkJobItemStatus.PENDING
     }
 
     fun isPending(
@@ -39,7 +40,7 @@ class JobTrackingStore(
             item.status = targetStatus
             jobs.findByIdOrNull(id)?.let { job ->
                 if (targetStatus == BulkJobItemStatus.DONE) job.done += 1 else job.failed += 1
-                if (job.done + job.failed >= job.total) job.status = BulkJobStatus.DONE
+                job.closeIfResolved()
             }
         }
     }
