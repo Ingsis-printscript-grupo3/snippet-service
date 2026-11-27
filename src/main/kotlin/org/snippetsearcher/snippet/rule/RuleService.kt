@@ -31,15 +31,7 @@ class RuleService(
         userId: String,
         typeParam: String,
         language: String,
-    ): List<RuleResponse> {
-        val type = parseType(typeParam)
-        val definitions = languages.get(language).rules(type)
-        val overrides =
-            repository
-                .findByIdUserIdAndIdLanguageAndIdType(userId, language, type.name)
-                .associateBy { it.id.name }
-        return definitions.map { toRuleResponse(it, overrides[it.name]) }
-    }
+    ): List<RuleResponse> = resolve(userId, language, parseType(typeParam)).map { it.toResponse() }
 
     @Transactional
     fun updateRules(
@@ -47,7 +39,7 @@ class RuleService(
         typeParam: String,
         language: String,
         updates: List<UpdateRuleRequest>,
-    ): BulkJobCreatedResponse {
+    ): RulesUpdateResult {
         val type = parseType(typeParam)
         val definitions = languages.get(language).rules(type).associateBy { it.name }
         val existing =
@@ -63,7 +55,7 @@ class RuleService(
             StreamNames.BULK_JOB_REQUESTS,
             BulkJobRequestMessage(job.id, userId, type.name, language),
         )
-        return BulkJobCreatedResponse(job.id)
+        return RulesUpdateResult(job.id, resolve(userId, language, type).map { it.toResponse() })
     }
 
     @Transactional(readOnly = true)
@@ -72,18 +64,25 @@ class RuleService(
         language: String,
         type: RuleType,
     ): Map<String, Any?> =
-        getRules(userId, type.name, language)
+        resolve(userId, language, type)
             .filter { it.enabled }
-            .associate { it.name to toEngineValue(type, it) }
+            .associate { it.definition.name to toEngineValue(type, it) }
 
-    private fun toEngineValue(
+    // reglas del lenguaje con los overrides del usuario aplicados encima de los defaults
+    private fun resolve(
+        userId: String,
+        language: String,
         type: RuleType,
-        rule: RuleResponse,
-    ): Any? =
-        when (type) {
-            RuleType.FORMAT -> if (rule.valueType == RuleValueType.INTEGER) rule.value?.toIntOrNull() ?: 0 else true
-            RuleType.LINT -> rule.value ?: "true"
+    ): List<ResolvedRule> {
+        val overrides =
+            repository
+                .findByIdUserIdAndIdLanguageAndIdType(userId, language, type.name)
+                .associateBy { it.id.name }
+        return languages.get(language).rules(type).map { def ->
+            val override = overrides[def.name]
+            ResolvedRule(def, override?.enabled ?: def.defaultEnabled, override?.value ?: def.defaultValue)
         }
+    }
 
     private fun saveUpdates(
         userId: String,
@@ -95,8 +94,8 @@ class RuleService(
             updates.map {
                 RuleConfig(
                     id = RuleConfigId(userId, language, type.name, it.name),
-                    enabled = it.enabled,
-                    value = it.value,
+                    enabled = it.isActive,
+                    value = it.valueAsText(),
                 )
             }
         repository.saveAll(entities)
@@ -127,11 +126,11 @@ class RuleService(
             val def =
                 definitions[update.name]
                     ?: throw InvalidRequestException("La regla '${update.name}' no existe")
-            if (update.enabled) validateValue(def, update.value)
+            if (update.isActive) validateValue(def, update.valueAsText())
         }
         val effectiveEnabled =
             definitions.mapValues { (name, def) ->
-                updates.find { it.name == name }?.enabled ?: existing[name]?.enabled ?: def.defaultEnabled
+                updates.find { it.name == name }?.isActive ?: existing[name]?.enabled ?: def.defaultEnabled
             }
         definitions.values.forEach { def ->
             if (effectiveEnabled[def.name] == true) {
@@ -174,24 +173,48 @@ class RuleService(
             throw InvalidRequestException("Valor $parsed fuera de rango para '${def.name}' ($min..${max ?: "∞"})")
         }
     }
-
-    private fun parseType(typeParam: String): RuleType =
-        RuleType.entries.firstOrNull { it.name.equals(typeParam, ignoreCase = true) }
-            ?: throw InvalidRequestException("Tipo de regla inválido: '$typeParam'")
 }
 
-private fun toRuleResponse(
-    def: RuleDefinition,
-    override: RuleConfig?,
-): RuleResponse =
+// formatting/linting son las rutas de printscript-ui; format/lint quedan como alias
+private fun parseType(typeParam: String): RuleType =
+    when (typeParam.lowercase()) {
+        "format", "formatting" -> RuleType.FORMAT
+        "lint", "linting" -> RuleType.LINT
+        else -> throw InvalidRequestException("Tipo de regla inválido: '$typeParam'")
+    }
+
+private fun toEngineValue(
+    type: RuleType,
+    rule: ResolvedRule,
+): Any? =
+    when (type) {
+        RuleType.FORMAT ->
+            if (rule.definition.valueType == RuleValueType.INTEGER) rule.value?.toIntOrNull() ?: 0 else true
+        RuleType.LINT -> rule.value ?: "true"
+    }
+
+private data class ResolvedRule(
+    val definition: RuleDefinition,
+    val enabled: Boolean,
+    val value: String?,
+)
+
+// value sale tipado para la UI: number en reglas enteras, string en enums y null en booleanas
+private fun ResolvedRule.toResponse(): RuleResponse =
     RuleResponse(
-        name = def.name,
-        enabled = override?.enabled ?: def.defaultEnabled,
-        value = override?.value ?: def.defaultValue,
-        valueType = def.valueType,
-        defaultValue = def.defaultValue,
-        min = def.min,
-        max = def.max,
-        allowedValues = def.allowedValues,
-        onlyVersions = def.onlyVersions,
+        id = definition.name,
+        name = definition.name,
+        isActive = enabled,
+        value =
+            when (definition.valueType) {
+                RuleValueType.INTEGER -> value?.toIntOrNull()
+                RuleValueType.ENUM -> value
+                RuleValueType.BOOLEAN -> null
+            },
+        valueType = definition.valueType,
+        defaultValue = definition.defaultValue,
+        min = definition.min,
+        max = definition.max,
+        allowedValues = definition.allowedValues,
+        onlyVersions = definition.onlyVersions,
     )
