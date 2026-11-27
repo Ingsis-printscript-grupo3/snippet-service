@@ -26,6 +26,7 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-webmvc")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
     // GET /actuator/health: lo usan el compose y quien quiera saber si el servicio esta arriba
     implementation("org.springframework.boot:spring-boot-starter-actuator")
     // RestClient para hablar con printscript-service, permission-service y el asset service
