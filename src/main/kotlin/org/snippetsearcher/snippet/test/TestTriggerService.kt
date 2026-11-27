@@ -4,6 +4,7 @@ import org.snippetsearcher.snippet.snippet.Snippet
 import org.snippetsearcher.snippet.streams.StreamNames
 import org.snippetsearcher.snippet.streams.StreamProducer
 import org.snippetsearcher.snippet.streams.TestRequestMessage
+import org.snippetsearcher.snippet.streams.publishAfterCommit
 import org.springframework.stereotype.Service
 import tools.jackson.databind.ObjectMapper
 import tools.jackson.module.kotlin.readValue
@@ -23,7 +24,7 @@ class TestTriggerService(
             test.status = TestStatus.PENDING
             val inputs: List<String> = objectMapper.readValue(test.inputsJson)
             val expected: List<String> = objectMapper.readValue(test.expectedOutputsJson)
-            producer.publish(
+            producer.publishAfterCommit(
                 StreamNames.TEST_REQUESTS,
                 TestRequestMessage(
                     userId = userId,
