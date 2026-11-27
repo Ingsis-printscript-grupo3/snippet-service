@@ -24,9 +24,9 @@ class FileTypeControllerTest(
         mockMvc.get("/file-types").andExpect {
             status { isOk() }
             jsonPath("$.length()") { value(2) }
-            jsonPath("$[0].language") { value(PRINTSCRIPT) }
-            jsonPath("$[0].extension") { value("ps") }
-            jsonPath("$[1].language") { value(OTHER_LANGUAGE) }
+            // por contenido y no por posicion: el orden de la lista no es parte del contrato
+            jsonPath("$[?(@.language == '$PRINTSCRIPT')].extension") { value("ps") }
+            jsonPath("$[?(@.language == '$OTHER_LANGUAGE')].extension") { value("ps") }
         }
     }
 }

@@ -5,7 +5,8 @@ import org.snippetsearcher.snippet.common.InvalidRequestException
 // lo que el snippet-service necesita de un lenguaje. Hoy hay uno solo, PrintScript,
 // pero la consigna dice que en el futuro no sera el unico
 interface LanguageService {
-    // la extension de los archivos de este lenguaje, sin el punto. La UI la usa para nombrar las descargas
+    // la extension de los archivos de este lenguaje, sin el punto. Con ella la UI reconoce de que lenguaje
+    // es un archivo que se sube
     val extension: String
 
     fun validate(
