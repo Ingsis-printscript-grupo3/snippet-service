@@ -66,7 +66,7 @@ class RedisStreamRunner(
         handlers.forEach { handler ->
             runCatching { pollHandler(handler) }
                 .onFailure {
-                    log.warn("Error polling stream {}: {}", handler.stream, it.message)
+                    log.warn("Error polling stream {}: {}", handler.stream, it.rootCauseMessage())
                     // NOGROUP: Redis no tiene el stream o el grupo, porque se reinicio sin datos o porque no
                     // estaba listo cuando arranco este servicio. Se recrea y el proximo poll sigue solo
                     if (it.mentions("NOGROUP")) ensureGroup(handler.stream, handler.group)
@@ -158,7 +158,7 @@ class RedisStreamRunner(
         } catch (ex: RuntimeException) {
             // BUSYGROUP es que el grupo ya existia: es lo esperado en cada arranque menos el primero
             if (!ex.mentions("BUSYGROUP")) {
-                log.warn("No se pudo crear grupo {} en {}: {}", group, stream, ex.message)
+                log.warn("No se pudo crear grupo {} en {}: {}", group, stream, ex.rootCauseMessage())
             }
         }
     }
@@ -169,5 +169,9 @@ class RedisStreamRunner(
 }
 
 // el error de Redis suele venir envuelto: se busca en toda la cadena de causas
-private fun Throwable.mentions(text: String): Boolean =
-    generateSequence(this) { it.cause }.any { it.message?.contains(text) == true }
+private fun Throwable.mentions(text: String): Boolean = causes().any { it.message?.contains(text) == true }
+
+// el mensaje de arriba suele ser generico ("Error in execution"); el que explica que paso es el de la raiz
+private fun Throwable.rootCauseMessage(): String? = causes().last().message
+
+private fun Throwable.causes(): Sequence<Throwable> = generateSequence(this) { it.cause }
