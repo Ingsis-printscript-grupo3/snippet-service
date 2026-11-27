@@ -116,10 +116,15 @@ services:
     volumes:
       - blob-data:/data
 
+  # la cola de trabajos. appendonly + volumen: los pedidos pendientes sobreviven a un reinicio de Redis,
+  # que es lo que permite retomar un job masivo desde donde quedo
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "6379:6379"
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -130,3 +135,4 @@ volumes:
   snippet-data:
   permission-data:
   blob-data:
+  redis-data:
