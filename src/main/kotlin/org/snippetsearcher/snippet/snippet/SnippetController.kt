@@ -1,6 +1,7 @@
 package org.snippetsearcher.snippet.snippet
 
 import org.snippetsearcher.snippet.common.CurrentUser
+import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.permission.Relation
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
@@ -23,26 +24,28 @@ import java.util.UUID
 @RequestMapping("/snippets")
 class SnippetController(
     private val service: SnippetService,
+    private val languages: LanguageRegistry,
 ) {
-    // US3
+    // US3. Crear responde 200 y no 201: es lo que espera el test de Cypress de la catedra
     @PostMapping(consumes = [MediaType.APPLICATION_JSON_VALUE])
-    @ResponseStatus(HttpStatus.CREATED)
     fun create(
         @CurrentUser userId: String,
-        @RequestBody request: CreateSnippetRequest,
-    ): SnippetResponse = service.create(userId, request)
+        @RequestBody body: CreateSnippetBody,
+    ): SnippetResponse = service.create(userId, body.toRequest(languages))
 
     // US1
     @PostMapping(consumes = [MediaType.MULTIPART_FORM_DATA_VALUE])
-    @ResponseStatus(HttpStatus.CREATED)
     fun createFromFile(
         @CurrentUser userId: String,
         @RequestPart("file") file: MultipartFile,
         @RequestParam name: String,
         @RequestParam(defaultValue = "") description: String,
         @RequestParam language: String,
-        @RequestParam version: String,
-    ): SnippetResponse = service.create(userId, CreateSnippetRequest(name, description, language, version, file.text()))
+        @RequestParam(required = false) version: String?,
+    ): SnippetResponse {
+        val body = CreateSnippetBody(name, description, language, version, file.text())
+        return service.create(userId, body.toRequest(languages))
+    }
 
     // US4
     @PatchMapping("/{id}", consumes = [MediaType.APPLICATION_JSON_VALUE])
