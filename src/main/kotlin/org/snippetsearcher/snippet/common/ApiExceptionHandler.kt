@@ -48,9 +48,9 @@ class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     fun forbidden(e: ForbiddenException): ErrorResponse = ErrorResponse(e.message!!)
 
-    @ExceptionHandler(SnippetNotFoundException::class)
+    @ExceptionHandler(SnippetNotFoundException::class, JobNotFoundException::class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
-    fun notFound(e: SnippetNotFoundException): ErrorResponse = ErrorResponse(e.message!!)
+    fun notFound(e: RuntimeException): ErrorResponse = ErrorResponse(e.message!!)
 
     // 422 y no 400: el pedido esta bien armado, lo que no cumple las reglas es el codigo del snippet
     @ExceptionHandler(InvalidSnippetException::class)

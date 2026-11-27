@@ -1,7 +1,7 @@
 package org.snippetsearcher.snippet.job
 
 import org.snippetsearcher.snippet.common.CurrentUser
-import org.snippetsearcher.snippet.common.SnippetNotFoundException
+import org.snippetsearcher.snippet.common.JobNotFoundException
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.web.bind.annotation.GetMapping
 import org.springframework.web.bind.annotation.PathVariable
@@ -19,8 +19,8 @@ class BulkJobController(
         @CurrentUser userId: String,
         @PathVariable jobId: UUID,
     ): BulkJobResponse {
-        val job = jobs.findByIdOrNull(jobId) ?: throw SnippetNotFoundException(jobId)
-        if (job.userId != userId) throw SnippetNotFoundException(jobId)
+        val job = jobs.findByIdOrNull(jobId) ?: throw JobNotFoundException(jobId)
+        if (job.userId != userId) throw JobNotFoundException(jobId)
         return BulkJobResponse(
             id = job.id,
             type = job.type,

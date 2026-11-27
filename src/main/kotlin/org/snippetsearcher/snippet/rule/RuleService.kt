@@ -12,6 +12,7 @@ import org.snippetsearcher.snippet.snippet.SnippetRepository
 import org.snippetsearcher.snippet.streams.BulkJobRequestMessage
 import org.snippetsearcher.snippet.streams.StreamNames
 import org.snippetsearcher.snippet.streams.StreamProducer
+import org.snippetsearcher.snippet.streams.publishAfterCommit
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.time.Instant
@@ -58,7 +59,10 @@ class RuleService(
         if (type == RuleType.FORMAT) snippets.clearFormattedKey(userId, language)
 
         val job = createBulkJob(userId, type, language)
-        producer.publish(StreamNames.BULK_JOB_REQUESTS, BulkJobRequestMessage(job.id, userId, type.name, language))
+        producer.publishAfterCommit(
+            StreamNames.BULK_JOB_REQUESTS,
+            BulkJobRequestMessage(job.id, userId, type.name, language),
+        )
         return BulkJobCreatedResponse(job.id)
     }
 

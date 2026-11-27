@@ -3,6 +3,8 @@ package org.snippetsearcher.snippet.streams
 import org.springframework.data.redis.connection.stream.RecordId
 import org.springframework.data.redis.core.StringRedisTemplate
 import org.springframework.stereotype.Component
+import org.springframework.transaction.support.TransactionSynchronization
+import org.springframework.transaction.support.TransactionSynchronizationManager
 import tools.jackson.databind.ObjectMapper
 
 interface StreamProducer {
@@ -10,6 +12,23 @@ interface StreamProducer {
         stream: String,
         payload: Any,
     ): RecordId?
+}
+
+fun StreamProducer.publishAfterCommit(
+    stream: String,
+    payload: Any,
+) {
+    if (!TransactionSynchronizationManager.isActualTransactionActive()) {
+        publish(stream, payload)
+        return
+    }
+    TransactionSynchronizationManager.registerSynchronization(
+        object : TransactionSynchronization {
+            override fun afterCommit() {
+                publish(stream, payload)
+            }
+        },
+    )
 }
 
 @Component

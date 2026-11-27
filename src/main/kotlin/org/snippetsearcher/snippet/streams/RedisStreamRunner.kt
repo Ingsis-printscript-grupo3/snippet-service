@@ -86,7 +86,11 @@ class RedisStreamRunner(
         handler: StreamHandler,
         record: MapRecord<String, String, String>,
     ) {
-        val payload = record.value["payload"] ?: return
+        val payload = record.value["payload"]
+        if (payload == null) {
+            redis.opsForStream<String, String>().acknowledge(handler.stream, handler.group, record.id)
+            return
+        }
         try {
             handler.handle(payload)
             redis.opsForStream<String, String>().acknowledge(handler.stream, handler.group, record.id)
@@ -143,7 +147,9 @@ class RedisStreamRunner(
         group: String,
     ) {
         try {
-            redis.opsForStream<String, String>().createGroup(stream, ReadOffset.from("0"), group)
+            redis.execute { conn ->
+                conn.streamCommands().xGroupCreate(stream.toByteArray(), group, ReadOffset.from("0"), true)
+            }
         } catch (ex: RuntimeException) {
             if (ex.message?.contains("BUSYGROUP") != true && ex.cause?.message?.contains("BUSYGROUP") != true) {
                 log.warn("No se pudo crear grupo {} en {}: {}", group, stream, ex.message)
