@@ -15,6 +15,8 @@ const val PRINTSCRIPT = "printscript"
 class PrintScriptLanguageService(
     private val client: RestClient,
 ) : LanguageService {
+    override val extension = "ps"
+
     override fun validate(
         version: String,
         content: String,
