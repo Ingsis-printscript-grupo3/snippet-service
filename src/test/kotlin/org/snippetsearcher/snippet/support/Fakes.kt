@@ -6,15 +6,20 @@ import org.snippetsearcher.snippet.language.LanguageService
 import org.snippetsearcher.snippet.language.LintResult
 import org.snippetsearcher.snippet.language.LintWarning
 import org.snippetsearcher.snippet.language.PRINTSCRIPT
+import org.snippetsearcher.snippet.language.RuleDefinition
+import org.snippetsearcher.snippet.language.RuleType
+import org.snippetsearcher.snippet.language.RuleValueType
 import org.snippetsearcher.snippet.language.SnippetError
 import org.snippetsearcher.snippet.language.ValidationResult
 import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.permission.PermissionClient
 import org.snippetsearcher.snippet.permission.Relation
 import org.snippetsearcher.snippet.storage.ContentStore
+import org.snippetsearcher.snippet.streams.StreamProducer
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Primary
+import org.springframework.data.redis.connection.stream.RecordId
 import java.util.UUID
 
 const val OTHER_LANGUAGE = "otrolenguaje"
@@ -51,6 +56,75 @@ class FakeLanguageService : LanguageService {
             ValidationResult(false, listOf(SnippetError("Expected ';'.", 2, 11, 2, 11)))
         } else {
             ValidationResult(true, emptyList())
+        }
+
+    override fun rules(type: RuleType): List<RuleDefinition> =
+        when (type) {
+            RuleType.FORMAT ->
+                listOf(
+                    RuleDefinition(
+                        "enforce-spacing-around-equals",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("enforce-no-spacing-around-equals"),
+                    ),
+                    RuleDefinition(
+                        "enforce-no-spacing-around-equals",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("enforce-spacing-around-equals"),
+                    ),
+                    RuleDefinition(
+                        "line-breaks-after-println",
+                        RuleType.FORMAT,
+                        RuleValueType.INTEGER,
+                        false,
+                        "0",
+                        0,
+                        2,
+                    ),
+                    RuleDefinition("indent-inside-if", RuleType.FORMAT, RuleValueType.INTEGER, false, "0", 0, null),
+                    RuleDefinition(
+                        "if-brace-same-line",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("if-brace-below-line"),
+                    ),
+                    RuleDefinition(
+                        "if-brace-below-line",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("if-brace-same-line"),
+                    ),
+                )
+            RuleType.LINT ->
+                listOf(
+                    RuleDefinition(
+                        "identifier_format",
+                        RuleType.LINT,
+                        RuleValueType.ENUM,
+                        true,
+                        "camel case",
+                        allowedValues = listOf("camel case", "snake case"),
+                    ),
+                    RuleDefinition(
+                        "mandatory-variable-or-literal-in-println",
+                        RuleType.LINT,
+                        RuleValueType.BOOLEAN,
+                        true,
+                    ),
+                    RuleDefinition(
+                        "mandatory-variable-or-literal-in-readInput",
+                        RuleType.LINT,
+                        RuleValueType.BOOLEAN,
+                        true,
+                        onlyVersions = listOf("1.1"),
+                    ),
+                )
         }
 }
 
@@ -124,8 +198,28 @@ class FakeContentStore : ContentStore {
     }
 }
 
+class FakeStreamProducer : StreamProducer {
+    val published = mutableListOf<Pair<String, Any>>()
+
+    override fun publish(
+        stream: String,
+        payload: Any,
+    ): RecordId {
+        published.add(stream to payload)
+        return RecordId.of("1-0")
+    }
+
+    fun reset() {
+        published.clear()
+    }
+}
+
 @TestConfiguration
 class FakeCollaborators {
+    @Bean
+    @Primary
+    fun fakeStreamProducer(): FakeStreamProducer = FakeStreamProducer()
+
     @Bean
     fun fakeLanguageService(): FakeLanguageService = FakeLanguageService()
 

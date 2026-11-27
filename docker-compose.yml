@@ -22,8 +22,12 @@ services:
       PRINTSCRIPT_SERVICE_URL: http://printscript-service:8080
       PERMISSION_SERVICE_URL: http://permission-service:8081
       ASSET_SERVICE_URL: http://asset-service:8080
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       snippet-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       printscript-service:
         condition: service_started
@@ -57,6 +61,12 @@ services:
         GITHUB_TOKEN: ${GITHUB_TOKEN:?falta GITHUB_TOKEN en .env}
     ports:
       - "8082:8080"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
 
   permission-service:
     build: ../permission-service
@@ -105,6 +115,16 @@ services:
       - "10000:10000"
     volumes:
       - blob-data:/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
 volumes:
   snippet-data:

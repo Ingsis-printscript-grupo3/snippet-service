@@ -26,6 +26,15 @@ class PrintScriptLanguageService(
         content: String,
     ): LintResult = post("/lintings", SnippetRequest(PRINTSCRIPT, version, content))
 
+    override fun rules(type: RuleType): List<RuleDefinition> =
+        callService("printscript-service") {
+            client
+                .get()
+                .uri("/rules?type={type}", type.name)
+                .retrieve()
+                .body<List<RuleDefinition>>()!!
+        }
+
     private inline fun <reified T : Any> post(
         path: String,
         request: SnippetRequest,
