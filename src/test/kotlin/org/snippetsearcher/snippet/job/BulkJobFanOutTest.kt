@@ -18,13 +18,14 @@ import org.springframework.test.context.ActiveProfiles
 import java.time.Instant
 import java.util.UUID
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 private const val ADMIN = "auth0|job-admin"
 
 // US 12 y 15: el reparto de un job masivo tiene que poder repetirse y no puede perder resultados
 @SpringBootTest
 @ActiveProfiles("test")
-@Import(FakeCollaborators::class, TestEnvironment::class)
+@Import(FakeCollaborators::class)
 class BulkJobFanOutTest(
     @Autowired private val fanOut: BulkJobFanOutService,
     @Autowired private val results: BulkJobResultService,
@@ -68,6 +69,48 @@ class BulkJobFanOutTest(
         assertEquals(listOf(waiting), lintRequests().map { it.snippetId })
         assertEquals(LintStatus.COMPLIANT, snippetService.get(ADMIN, resolved).lintStatus)
         assertEquals(1, jobs.findById(job.id).get().done)
+    }
+
+    // Redis se cae a mitad de la publicacion: el reparto tiene que fallar, para que el mensaje no se
+    // confirme, y al repetirse salir completo
+    @Test
+    fun `if publishing fails the fan-out fails and repeating it sends every snippet`() {
+        repeat(3) { createSnippet("snippet$it") }
+        val request = BulkJobRequestMessage(newLintJob().id, ADMIN, "LINT", "printscript")
+        var attempts = 0
+        environment.producer.onPublish = { if (++attempts == 2) error("redis no responde") }
+
+        assertFailsWith<IllegalStateException> { fanOut.fanOut(request) }
+        assertEquals(3, environment.committedRows("bulk_job_item"))
+        environment.producer.reset()
+
+        fanOut.fanOut(request)
+
+        assertEquals(3, lintRequests().size)
+    }
+
+    // si un snippet desaparece entre dos repartos ya no llega ningun resultado que cierre el job
+    @Test
+    fun `a repeated fan-out closes the job when nothing is left to resolve`() {
+        val first = createSnippet("primero")
+        val second = createSnippet("segundo")
+        val deleted = createSnippet("borrado")
+        val job = newLintJob()
+        val request = BulkJobRequestMessage(job.id, ADMIN, "LINT", "printscript")
+        fanOut.fanOut(request)
+        lintRequests().filter { it.snippetId != deleted }.forEach {
+            results.applyLintResult(
+                LintResultMessage(job.id, it.snippetId, it.snippetVersion, emptyList(), emptyList()),
+            )
+        }
+        assertEquals(BulkJobStatus.RUNNING, jobs.findById(job.id).get().status)
+        snippetService.delete(ADMIN, deleted)
+
+        fanOut.fanOut(request)
+
+        val closed = jobs.findById(job.id).get()
+        assertEquals(BulkJobStatus.DONE, closed.status)
+        assertEquals(listOf(first, second).size, closed.done)
     }
 
     private fun lintRequests(): List<LintRequestMessage> =

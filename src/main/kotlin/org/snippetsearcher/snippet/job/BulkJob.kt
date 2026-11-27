@@ -26,7 +26,12 @@ class BulkJob(
     @Enumerated(EnumType.STRING)
     var status: BulkJobStatus = BulkJobStatus.RUNNING,
     val createdAt: Instant,
-)
+) {
+    // un job termina cuando todos sus snippets quedaron resueltos, bien o mal
+    fun closeIfResolved() {
+        if (done + failed >= total) status = BulkJobStatus.DONE
+    }
+}
 
 enum class BulkJobStatus {
     RUNNING,

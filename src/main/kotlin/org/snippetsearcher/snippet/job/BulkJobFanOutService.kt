@@ -42,13 +42,14 @@ class BulkJobFanOutService(
                 snippets.findAllById(ownedIds).filter { it.language == msg.language }
             }
         job.total = targets.size
-        if (targets.isEmpty()) {
-            job.status = BulkJobStatus.DONE
-            return
+        if (targets.isNotEmpty()) {
+            val type = RuleType.valueOf(msg.type)
+            val rulesMap = ruleService.buildRulesMap(msg.userId, msg.language, type)
+            targets.forEach { dispatchSnippet(job.id, msg.userId, type, it, rulesMap) }
         }
-        val type = RuleType.valueOf(msg.type)
-        val rulesMap = ruleService.buildRulesMap(msg.userId, msg.language, type)
-        targets.forEach { dispatchSnippet(job.id, msg.userId, type, it, rulesMap) }
+        // sin snippets, o en un reparto repetido donde ya estaban todos resueltos, no va a llegar ningun
+        // resultado que cierre el job: se cierra aca
+        job.closeIfResolved()
     }
 
     private fun dispatchSnippet(
@@ -58,7 +59,7 @@ class BulkJobFanOutService(
         snippet: Snippet,
         rulesMap: Map<String, Any?>,
     ) {
-        if (!store.ensurePendingItem(jobId, snippet.id)) return
+        if (!store.claimPendingItem(jobId, snippet.id)) return
         val content = contents.get(snippet.contentKey)
         when (type) {
             RuleType.LINT -> publishLint(jobId, userId, snippet, content, rulesMap)

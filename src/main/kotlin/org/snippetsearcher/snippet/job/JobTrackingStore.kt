@@ -13,7 +13,7 @@ class JobTrackingStore(
 
     // crea el item si no existe y dice si todavia hay que procesarlo. Da false cuando el reparto se repite
     // (un reinicio a mitad de camino) y ese snippet ya se habia resuelto en el intento anterior
-    fun ensurePendingItem(
+    fun claimPendingItem(
         jobId: UUID,
         snippetId: UUID,
     ): Boolean {
@@ -40,7 +40,7 @@ class JobTrackingStore(
             item.status = targetStatus
             jobs.findByIdOrNull(id)?.let { job ->
                 if (targetStatus == BulkJobItemStatus.DONE) job.done += 1 else job.failed += 1
-                if (job.done + job.failed >= job.total) job.status = BulkJobStatus.DONE
+                job.closeIfResolved()
             }
         }
     }
