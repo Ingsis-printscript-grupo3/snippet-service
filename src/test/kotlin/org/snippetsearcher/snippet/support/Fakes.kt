@@ -24,28 +24,35 @@ import java.util.UUID
 
 const val OTHER_LANGUAGE = "otrolenguaje"
 
+private val CAMEL_CASE_NAME = Regex("[a-z][A-Z]")
+
 // reemplazan a los tres servicios de afuera en los tests: los de controller corren sin red
 
 // un snippet es invalido si contiene la palabra "error", y el error siempre esta en la linea 2, columna 11.
-// No cumple las reglas de linteo si tiene un "_": la regla predeterminada de PrintScript pide camelCase
+// El linteo imita la regla identifier_format de PrintScript: con "camel case" molesta un "_", con
+// "snake case" molesta una mayuscula en medio de un nombre (miVar), y si la regla no viene no se chequea
 class FakeLanguageService : LanguageService {
     var failLint = false
+    var failRules = false
+
+    fun reset() {
+        failLint = false
+        failRules = false
+    }
 
     override fun lint(
         version: String,
         content: String,
+        rules: Map<String, Any?>,
     ): LintResult {
         if (failLint) throw DownstreamException("printscript-service")
-        val warnings =
-            if (content.contains(
-                    "_",
-                )
-            ) {
-                listOf(LintWarning("Identifier must be camel case", 1, 5))
-            } else {
-                emptyList()
+        val warning =
+            when (rules["identifier_format"]) {
+                "camel case" -> "Identifier must be camel case".takeIf { content.contains("_") }
+                "snake case" -> "Identifier must be snake case".takeIf { CAMEL_CASE_NAME.containsMatchIn(content) }
+                else -> null
             }
-        return LintResult(warnings, emptyList())
+        return LintResult(listOfNotNull(warning).map { LintWarning(it, 1, 5) }, emptyList())
     }
 
     override fun validate(
@@ -58,7 +65,12 @@ class FakeLanguageService : LanguageService {
             ValidationResult(true, emptyList())
         }
 
-    override fun rules(type: RuleType): List<RuleDefinition> =
+    override fun rules(type: RuleType): List<RuleDefinition> {
+        if (failRules) throw DownstreamException("printscript-service")
+        return definitions(type)
+    }
+
+    private fun definitions(type: RuleType): List<RuleDefinition> =
         when (type) {
             RuleType.FORMAT ->
                 listOf(
@@ -201,16 +213,21 @@ class FakeContentStore : ContentStore {
 class FakeStreamProducer : StreamProducer {
     val published = mutableListOf<Pair<String, Any>>()
 
+    // para mirar el estado del sistema en el instante en que un mensaje sale a la cola
+    var onPublish: (stream: String) -> Unit = {}
+
     override fun publish(
         stream: String,
         payload: Any,
     ): RecordId {
+        onPublish(stream)
         published.add(stream to payload)
         return RecordId.of("1-0")
     }
 
     fun reset() {
         published.clear()
+        onPublish = {}
     }
 }
 

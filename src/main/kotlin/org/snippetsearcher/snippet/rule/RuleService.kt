@@ -58,7 +58,9 @@ class RuleService(
         return RulesUpdateResult(job.id, resolve(userId, language, type).map { it.toResponse() })
     }
 
-    @Transactional(readOnly = true)
+    // las reglas habilitadas de un usuario, con las claves y valores que espera el lenguaje.
+    // Sin @Transactional a proposito: lo llaman desde transacciones que siguen adelante si el servicio del
+    // lenguaje no responde, y una excepcion que cruza un metodo transaccional las marcaria para rollback
     fun buildRulesMap(
         userId: String,
         language: String,

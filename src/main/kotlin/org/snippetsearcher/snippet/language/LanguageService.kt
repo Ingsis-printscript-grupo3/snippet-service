@@ -10,10 +10,12 @@ interface LanguageService {
         content: String,
     ): ValidationResult
 
-    // corre las reglas predeterminadas del lenguaje. Cuando exista la US14 va a recibir las del owner
+    // rules son las reglas de lint del owner ya resueltas: solo las habilitadas, con las claves del lenguaje.
+    // Un mapa vacio es "ninguna regla habilitada", no "las predeterminadas"
     fun lint(
         version: String,
         content: String,
+        rules: Map<String, Any?>,
     ): LintResult
 
     fun rules(type: RuleType): List<RuleDefinition>

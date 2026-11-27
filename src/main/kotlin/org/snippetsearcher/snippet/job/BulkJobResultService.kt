@@ -1,7 +1,7 @@
 package org.snippetsearcher.snippet.job
 
-import org.snippetsearcher.snippet.rule.LintViolation
-import org.snippetsearcher.snippet.rule.LintViolationRepository
+import org.snippetsearcher.snippet.language.LintResult
+import org.snippetsearcher.snippet.rule.SnippetLinter
 import org.snippetsearcher.snippet.snippet.LintStatus
 import org.snippetsearcher.snippet.snippet.Snippet
 import org.snippetsearcher.snippet.snippet.SnippetRepository
@@ -25,7 +25,7 @@ import java.util.UUID
 @Service
 class BulkJobResultService(
     private val snippets: SnippetRepository,
-    private val violations: LintViolationRepository,
+    private val linter: SnippetLinter,
     private val store: JobTrackingStore,
     private val tests: SnippetTestRepository,
     private val contents: ContentStore,
@@ -35,10 +35,7 @@ class BulkJobResultService(
     fun applyLintResult(msg: LintResultMessage) {
         val snippet = findFreshSnippet(msg.snippetId, msg.snippetVersion, msg.jobId) ?: return
         if (!store.isPending(msg.jobId, snippet.id)) return
-        violations.deleteBySnippetId(snippet.id)
-        saveViolations(snippet.id, msg)
-        snippet.lintStatus =
-            if (msg.warnings.isEmpty() && msg.errors.isEmpty()) LintStatus.COMPLIANT else LintStatus.NOT_COMPLIANT
+        snippet.lintStatus = linter.record(snippet.id, LintResult(msg.warnings, msg.errors))
         store.completeItem(msg.jobId, snippet.id, BulkJobItemStatus.DONE)
     }
 
@@ -112,19 +109,4 @@ class BulkJobResultService(
         a: Instant,
         b: Instant,
     ): Boolean = a.truncatedTo(ChronoUnit.MILLIS) == b.truncatedTo(ChronoUnit.MILLIS)
-
-    private fun saveViolations(
-        snippetId: UUID,
-        msg: LintResultMessage,
-    ) {
-        val warningRows =
-            msg.warnings.map {
-                LintViolation(UUID.randomUUID(), snippetId, "lint", it.message, it.line, it.column)
-            }
-        val errorRows =
-            msg.errors.map {
-                LintViolation(UUID.randomUUID(), snippetId, "Parser", it.message, it.line, it.column)
-            }
-        violations.saveAll(warningRows + errorRows)
-    }
 }
