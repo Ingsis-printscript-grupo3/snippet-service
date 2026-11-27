@@ -5,6 +5,10 @@ import org.snippetsearcher.snippet.common.InvalidRequestException
 // lo que el snippet-service necesita de un lenguaje. Hoy hay uno solo, PrintScript,
 // pero la consigna dice que en el futuro no sera el unico
 interface LanguageService {
+    // la extension de los archivos de este lenguaje, sin el punto. Con ella la UI reconoce de que lenguaje
+    // es un archivo que se sube
+    val extension: String
+
     fun validate(
         version: String,
         content: String,
@@ -45,6 +49,12 @@ data class SnippetError(
     val endColumn: Int,
 )
 
+// un lenguaje soportado y la extension de sus archivos: lo que la UI ofrece al elegir en que lenguaje esta un snippet
+data class FileType(
+    val language: String,
+    val extension: String,
+)
+
 // elige el servicio segun el campo language del snippet
 class LanguageRegistry(
     private val services: Map<String, LanguageService>,
@@ -53,4 +63,6 @@ class LanguageRegistry(
         services[language] ?: throw InvalidRequestException(
             "El lenguaje '$language' no está soportado. Soportados: ${services.keys.joinToString()}",
         )
+
+    fun fileTypes(): List<FileType> = services.map { (language, service) -> FileType(language, service.extension) }
 }

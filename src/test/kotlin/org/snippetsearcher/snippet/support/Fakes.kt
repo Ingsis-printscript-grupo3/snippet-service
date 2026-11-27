@@ -24,6 +24,7 @@ const val OTHER_LANGUAGE = "otrolenguaje"
 // un snippet es invalido si contiene la palabra "error", y el error siempre esta en la linea 2, columna 11.
 // No cumple las reglas de linteo si tiene un "_": la regla predeterminada de PrintScript pide camelCase
 class FakeLanguageService : LanguageService {
+    override val extension = "ps"
     var failLint = false
 
     override fun lint(
