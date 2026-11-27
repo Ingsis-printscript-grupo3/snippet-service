@@ -33,6 +33,7 @@ private val CAMEL_CASE_NAME = Regex("[a-z][A-Z]")
 // El linteo imita la regla identifier_format de PrintScript: con "camel case" molesta un "_", con
 // "snake case" molesta una mayuscula en medio de un nombre (miVar), y si la regla no viene no se chequea
 class FakeLanguageService : LanguageService {
+    override val extension = "ps"
     var failLint = false
     var failRules = false
 
