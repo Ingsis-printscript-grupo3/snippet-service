@@ -6,8 +6,8 @@ import org.springframework.transaction.PlatformTransactionManager
 import org.springframework.transaction.TransactionDefinition
 import org.springframework.transaction.support.TransactionTemplate
 
-// La base y los fakes los comparten todas las clases de test del mismo contexto: lo que una deja, otra lo ve.
-// Junta en un lugar como dejar todo como recien levantado. Se suma con @Import al test que lo necesite
+// La base y los fakes los comparten todas las clases de test: lo que una deja, otra lo ve.
+// Junta en un lugar como dejar todo como recien levantado. Viene con FakeCollaborators
 class TestEnvironment(
     private val jdbc: JdbcTemplate,
     transactions: PlatformTransactionManager,

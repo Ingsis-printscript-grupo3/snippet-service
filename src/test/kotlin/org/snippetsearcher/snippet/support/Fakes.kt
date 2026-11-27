@@ -18,6 +18,7 @@ import org.snippetsearcher.snippet.storage.ContentStore
 import org.snippetsearcher.snippet.streams.StreamProducer
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
 import org.springframework.data.redis.connection.stream.RecordId
 import java.util.UUID
@@ -231,7 +232,9 @@ class FakeStreamProducer : StreamProducer {
     }
 }
 
+// TestEnvironment va aca y no en cada test: un @Import distinto por clase levantaria otro contexto de Spring
 @TestConfiguration
+@Import(TestEnvironment::class)
 class FakeCollaborators {
     @Bean
     @Primary

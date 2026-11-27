@@ -22,8 +22,8 @@ class SnippetLinter(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    // lintear no bloquea: el snippet ya es valido. Si el servicio del lenguaje no responde queda PENDING
-    // y se puede volver a lintear despues, sin perder el snippet que el usuario acaba de guardar
+    // lintear no bloquea: el snippet ya es valido y no se pierde lo que el usuario acaba de guardar. Si el
+    // servicio del lenguaje no responde queda PENDING hasta que se lo edite o el owner cambie sus reglas
     fun lint(
         snippet: Snippet,
         content: String,

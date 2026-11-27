@@ -31,7 +31,7 @@ private const val CAMEL_CASE_SNIPPET = "let miVar: number = 1;"
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles("test")
-@Import(FakeCollaborators::class, TestEnvironment::class)
+@Import(FakeCollaborators::class)
 class SnippetLinterTest(
     @Autowired private val mockMvc: MockMvc,
     @Autowired private val snippets: SnippetRepository,
