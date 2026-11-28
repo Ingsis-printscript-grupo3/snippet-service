@@ -24,6 +24,8 @@ services:
       ASSET_SERVICE_URL: http://asset-service:8080
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      # en local no hay license key: sin esto, el agente llena los logs de errores de conexion
+      NEW_RELIC_AGENT_ENABLED: "false"
     depends_on:
       snippet-db:
         condition: service_healthy
@@ -64,6 +66,7 @@ services:
     environment:
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      NEW_RELIC_AGENT_ENABLED: "false"
     depends_on:
       redis:
         condition: service_healthy
@@ -76,6 +79,7 @@ services:
       DB_URL: jdbc:postgresql://permission-db:5432/permissions
       DB_USER: permission
       DB_PASSWORD: permission
+      NEW_RELIC_AGENT_ENABLED: "false"
     depends_on:
       permission-db:
         condition: service_healthy
