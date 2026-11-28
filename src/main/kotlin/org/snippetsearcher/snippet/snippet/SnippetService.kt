@@ -1,13 +1,13 @@
 package org.snippetsearcher.snippet.snippet
 
 import org.slf4j.LoggerFactory
-import org.snippetsearcher.snippet.common.DownstreamException
 import org.snippetsearcher.snippet.common.ForbiddenException
 import org.snippetsearcher.snippet.common.InvalidSnippetException
 import org.snippetsearcher.snippet.common.SnippetNotFoundException
 import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.permission.PermissionClient
+import org.snippetsearcher.snippet.rule.SnippetLinter
 import org.snippetsearcher.snippet.storage.ContentStore
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
@@ -21,6 +21,7 @@ class SnippetService(
     private val languages: LanguageRegistry,
     private val permissions: PermissionClient,
     private val contents: ContentStore,
+    private val linter: SnippetLinter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -34,8 +35,9 @@ class SnippetService(
         request.requireNoBlanks()
         validate(request.language, request.version, request.content)
 
-        val lintStatus = lintStatusOf(request.language, request.version, request.content)
-        val snippet = repository.save(request.toSnippet(userId, lintStatus))
+        // primero la fila: las violaciones de lint apuntan a ella
+        val snippet = repository.save(request.toSnippet(userId, LintStatus.PENDING))
+        snippet.lintStatus = linter.lint(snippet, request.content)
         contents.put(snippet.contentKey, request.content)
         grantOwnerOrDropContent(snippet, userId)
         return snippet.toResponse(request.content)
@@ -81,7 +83,7 @@ class SnippetService(
         snippet.language = language
         snippet.version = version
         snippet.updatedAt = Instant.now()
-        if (changesCode) snippet.lintStatus = lintStatusOf(language, version, content)
+        if (changesCode) snippet.lintStatus = linter.lint(snippet, content)
         if (request.content != null) contents.put(snippet.contentKey, content)
         return snippet.toResponse(content)
     }
@@ -134,29 +136,6 @@ class SnippetService(
         val result = languages.get(language).validate(version, content)
         if (!result.valid) throw InvalidSnippetException(result.errors)
     }
-
-    // lintear no bloquea: el snippet ya es valido. Si el printscript-service no responde queda PENDING
-    // y se puede volver a lintear despues, sin perder el snippet que el usuario acaba de guardar
-    private fun lintStatusOf(
-        language: String,
-        version: String,
-        content: String,
-    ): LintStatus =
-        try {
-            if (languages
-                    .get(
-                        language,
-                    ).lint(version, content)
-                    .compliant
-            ) {
-                LintStatus.COMPLIANT
-            } else {
-                LintStatus.NOT_COMPLIANT
-            }
-        } catch (e: DownstreamException) {
-            log.warn("No se pudo lintear el snippet, queda {}", LintStatus.PENDING, e)
-            LintStatus.PENDING
-        }
 
     // sin ningun permiso es 404 y no 403: no se le confirma a nadie que el snippet existe
     private fun findWithAccess(

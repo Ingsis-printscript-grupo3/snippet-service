@@ -6,6 +6,8 @@ import jakarta.persistence.Enumerated
 import jakarta.persistence.Id
 import jakarta.persistence.Table
 import org.springframework.data.jpa.repository.JpaRepository
+import org.springframework.data.jpa.repository.Modifying
+import org.springframework.data.jpa.repository.Query
 import java.time.Instant
 import java.util.UUID
 
@@ -24,8 +26,21 @@ class Snippet(
     var updatedAt: Instant,
     @Enumerated(EnumType.STRING)
     var lintStatus: LintStatus = LintStatus.PENDING,
+    var formattedKey: String? = null,
 ) {
     val contentKey: String get() = id.toString()
+
+    fun applyMetadata(
+        request: UpdateSnippetRequest,
+        language: String,
+        version: String,
+    ) {
+        request.name?.let { name = it }
+        request.description?.let { description = it }
+        this.language = language
+        this.version = version
+        updatedAt = Instant.now()
+    }
 }
 
 // el orden de las constantes es el orden cuando se ordena por validez: primero los que cumplen
@@ -35,6 +50,14 @@ enum class LintStatus {
 
     // todavia no se pudo lintear, por ejemplo porque el printscript-service no respondia
     PENDING,
+    FAILED,
 }
 
-interface SnippetRepository : JpaRepository<Snippet, UUID>
+interface SnippetRepository : JpaRepository<Snippet, UUID> {
+    @Modifying
+    @Query("update Snippet s set s.formattedKey = null where s.ownerId = :ownerId and s.language = :language")
+    fun clearFormattedKey(
+        ownerId: String,
+        language: String,
+    )
+}

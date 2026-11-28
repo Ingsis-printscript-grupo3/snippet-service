@@ -23,15 +23,25 @@ class PrintScriptLanguageService(
         content: String,
     ): ValidationResult = post("/validations", SnippetRequest(PRINTSCRIPT, version, content))
 
-    // sin rules: el printscript-service corre las predeterminadas
+    // rules viaja siempre, aunque este vacio: sin el campo el printscript-service correria las predeterminadas
     override fun lint(
         version: String,
         content: String,
-    ): LintResult = post("/lintings", SnippetRequest(PRINTSCRIPT, version, content))
+        rules: Map<String, Any?>,
+    ): LintResult = post("/lintings", LintRequest(PRINTSCRIPT, version, content, rules))
+
+    override fun rules(type: RuleType): List<RuleDefinition> =
+        callService("printscript-service") {
+            client
+                .get()
+                .uri("/rules?type={type}", type.name)
+                .retrieve()
+                .body<List<RuleDefinition>>()!!
+        }
 
     private inline fun <reified T : Any> post(
         path: String,
-        request: SnippetRequest,
+        request: Any,
     ): T =
         callService("printscript-service") {
             try {
@@ -53,6 +63,13 @@ class PrintScriptLanguageService(
         val language: String,
         val version: String,
         val content: String,
+    )
+
+    data class LintRequest(
+        val language: String,
+        val version: String,
+        val content: String,
+        val rules: Map<String, Any?>,
     )
 
     data class RemoteError(

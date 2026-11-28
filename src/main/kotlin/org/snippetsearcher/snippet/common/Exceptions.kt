@@ -15,6 +15,10 @@ class SnippetNotFoundException(
     id: UUID,
 ) : RuntimeException("No existe el snippet $id")
 
+class JobNotFoundException(
+    id: UUID,
+) : RuntimeException("No existe el job $id")
+
 // tiene acceso de lectura pero intenta algo que solo puede hacer el owner
 class ForbiddenException(
     message: String,

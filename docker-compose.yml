@@ -22,8 +22,12 @@ services:
       PRINTSCRIPT_SERVICE_URL: http://printscript-service:8080
       PERMISSION_SERVICE_URL: http://permission-service:8081
       ASSET_SERVICE_URL: http://asset-service:8080
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
     depends_on:
       snippet-db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       printscript-service:
         condition: service_started
@@ -57,6 +61,12 @@ services:
         GITHUB_TOKEN: ${GITHUB_TOKEN:?falta GITHUB_TOKEN en .env}
     ports:
       - "8082:8080"
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+    depends_on:
+      redis:
+        condition: service_healthy
 
   permission-service:
     build: ../permission-service
@@ -106,7 +116,23 @@ services:
     volumes:
       - blob-data:/data
 
+  # la cola de trabajos. appendonly + volumen: los pedidos pendientes sobreviven a un reinicio de Redis,
+  # que es lo que permite retomar un job masivo desde donde quedo
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
 volumes:
   snippet-data:
   permission-data:
   blob-data:
+  redis-data:

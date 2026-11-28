@@ -84,12 +84,12 @@ class PrintScriptLanguageServiceTest {
     }
 
     @Test
-    fun `lint sends the snippet without rules so the default ones run`() {
+    fun `lint sends the snippet with the rules it is given`() {
         server
             .expect(requestTo("http://printscript/lintings"))
             .andExpect(method(HttpMethod.POST))
             .andExpect(jsonPath("$.content").value("let mi_var: number = 1;"))
-            .andExpect(jsonPath("$.rules").doesNotExist())
+            .andExpect(jsonPath("$.rules.identifier_format").value("camel case"))
             .andRespond(
                 withSuccess(
                     """{"warnings":[{"message":"Identifier must be camel case","line":1,"column":5}],"errors":[]}""",
@@ -97,18 +97,21 @@ class PrintScriptLanguageServiceTest {
                 ),
             )
 
-        val result = service.lint("1.1", "let mi_var: number = 1;")
+        val result = service.lint("1.1", "let mi_var: number = 1;", mapOf("identifier_format" to "camel case"))
 
         assertEquals(listOf(LintWarning("Identifier must be camel case", 1, 5)), result.warnings)
         assertFalse(result.compliant)
     }
 
+    // sin el campo el printscript-service correria las reglas predeterminadas en vez de ninguna
     @Test
-    fun `a snippet without warnings nor errors is compliant`() {
+    fun `lint sends an empty rules object when every rule is disabled`() {
         server
             .expect(requestTo("http://printscript/lintings"))
+            .andExpect(jsonPath("$.rules").isMap)
+            .andExpect(jsonPath("$.rules").isEmpty)
             .andRespond(withSuccess("""{"warnings":[],"errors":[]}""", MediaType.APPLICATION_JSON))
 
-        assertTrue(service.lint("1.1", "println(1);").compliant)
+        assertTrue(service.lint("1.1", "println(1);", emptyMap()).compliant)
     }
 }

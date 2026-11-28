@@ -6,43 +6,56 @@ import org.snippetsearcher.snippet.language.LanguageService
 import org.snippetsearcher.snippet.language.LintResult
 import org.snippetsearcher.snippet.language.LintWarning
 import org.snippetsearcher.snippet.language.PRINTSCRIPT
+import org.snippetsearcher.snippet.language.RuleDefinition
+import org.snippetsearcher.snippet.language.RuleType
+import org.snippetsearcher.snippet.language.RuleValueType
 import org.snippetsearcher.snippet.language.SnippetError
 import org.snippetsearcher.snippet.language.ValidationResult
 import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.permission.PermissionClient
 import org.snippetsearcher.snippet.permission.Relation
 import org.snippetsearcher.snippet.storage.ContentStore
+import org.snippetsearcher.snippet.streams.StreamProducer
 import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
 import org.springframework.context.annotation.Primary
+import org.springframework.data.redis.connection.stream.RecordId
 import java.util.UUID
 
 const val OTHER_LANGUAGE = "otrolenguaje"
 
+private val CAMEL_CASE_NAME = Regex("[a-z][A-Z]")
+
 // reemplazan a los tres servicios de afuera en los tests: los de controller corren sin red
 
 // un snippet es invalido si contiene la palabra "error", y el error siempre esta en la linea 2, columna 11.
-// No cumple las reglas de linteo si tiene un "_": la regla predeterminada de PrintScript pide camelCase
+// El linteo imita la regla identifier_format de PrintScript: con "camel case" molesta un "_", con
+// "snake case" molesta una mayuscula en medio de un nombre (miVar), y si la regla no viene no se chequea
 class FakeLanguageService : LanguageService {
     override val defaultVersion = "1.1"
     override val extension = "ps"
     var failLint = false
+    var failRules = false
+
+    fun reset() {
+        failLint = false
+        failRules = false
+    }
 
     override fun lint(
         version: String,
         content: String,
+        rules: Map<String, Any?>,
     ): LintResult {
         if (failLint) throw DownstreamException("printscript-service")
-        val warnings =
-            if (content.contains(
-                    "_",
-                )
-            ) {
-                listOf(LintWarning("Identifier must be camel case", 1, 5))
-            } else {
-                emptyList()
+        val warning =
+            when (rules["identifier_format"]) {
+                "camel case" -> "Identifier must be camel case".takeIf { content.contains("_") }
+                "snake case" -> "Identifier must be snake case".takeIf { CAMEL_CASE_NAME.containsMatchIn(content) }
+                else -> null
             }
-        return LintResult(warnings, emptyList())
+        return LintResult(listOfNotNull(warning).map { LintWarning(it, 1, 5) }, emptyList())
     }
 
     override fun validate(
@@ -53,6 +66,80 @@ class FakeLanguageService : LanguageService {
             ValidationResult(false, listOf(SnippetError("Expected ';'.", 2, 11, 2, 11)))
         } else {
             ValidationResult(true, emptyList())
+        }
+
+    override fun rules(type: RuleType): List<RuleDefinition> {
+        if (failRules) throw DownstreamException("printscript-service")
+        return definitions(type)
+    }
+
+    private fun definitions(type: RuleType): List<RuleDefinition> =
+        when (type) {
+            RuleType.FORMAT ->
+                listOf(
+                    RuleDefinition(
+                        "enforce-spacing-around-equals",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("enforce-no-spacing-around-equals"),
+                    ),
+                    RuleDefinition(
+                        "enforce-no-spacing-around-equals",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("enforce-spacing-around-equals"),
+                    ),
+                    RuleDefinition(
+                        "line-breaks-after-println",
+                        RuleType.FORMAT,
+                        RuleValueType.INTEGER,
+                        false,
+                        "0",
+                        0,
+                        2,
+                    ),
+                    RuleDefinition("indent-inside-if", RuleType.FORMAT, RuleValueType.INTEGER, false, "0", 0, null),
+                    RuleDefinition(
+                        "if-brace-same-line",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("if-brace-below-line"),
+                    ),
+                    RuleDefinition(
+                        "if-brace-below-line",
+                        RuleType.FORMAT,
+                        RuleValueType.BOOLEAN,
+                        false,
+                        exclusiveWith = listOf("if-brace-same-line"),
+                    ),
+                )
+            RuleType.LINT ->
+                listOf(
+                    RuleDefinition(
+                        "identifier_format",
+                        RuleType.LINT,
+                        RuleValueType.ENUM,
+                        true,
+                        "camel case",
+                        allowedValues = listOf("camel case", "snake case"),
+                    ),
+                    RuleDefinition(
+                        "mandatory-variable-or-literal-in-println",
+                        RuleType.LINT,
+                        RuleValueType.BOOLEAN,
+                        true,
+                    ),
+                    RuleDefinition(
+                        "mandatory-variable-or-literal-in-readInput",
+                        RuleType.LINT,
+                        RuleValueType.BOOLEAN,
+                        true,
+                        onlyVersions = listOf("1.1"),
+                    ),
+                )
         }
 }
 
@@ -126,8 +213,35 @@ class FakeContentStore : ContentStore {
     }
 }
 
+class FakeStreamProducer : StreamProducer {
+    val published = mutableListOf<Pair<String, Any>>()
+
+    // para mirar el estado del sistema en el instante en que un mensaje sale a la cola
+    var onPublish: (stream: String) -> Unit = {}
+
+    override fun publish(
+        stream: String,
+        payload: Any,
+    ): RecordId {
+        onPublish(stream)
+        published.add(stream to payload)
+        return RecordId.of("1-0")
+    }
+
+    fun reset() {
+        published.clear()
+        onPublish = {}
+    }
+}
+
+// TestEnvironment va aca y no en cada test: un @Import distinto por clase levantaria otro contexto de Spring
 @TestConfiguration
+@Import(TestEnvironment::class)
 class FakeCollaborators {
+    @Bean
+    @Primary
+    fun fakeStreamProducer(): FakeStreamProducer = FakeStreamProducer()
+
     @Bean
     fun fakeLanguageService(): FakeLanguageService = FakeLanguageService()
 
