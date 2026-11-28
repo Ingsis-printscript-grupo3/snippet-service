@@ -16,6 +16,7 @@ class PrintScriptLanguageService(
     private val client: RestClient,
 ) : LanguageService {
     override val extension = "ps"
+    override val defaultVersion = "1.1"
 
     override fun validate(
         version: String,

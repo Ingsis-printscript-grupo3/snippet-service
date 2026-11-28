@@ -66,7 +66,7 @@ class SnippetControllerTest(
                     contentType = MediaType.APPLICATION_JSON
                     content = json
                 }.andExpect {
-                    status { isCreated() }
+                    status { isOk() }
                     jsonPath("$.name") { value("suma") }
                     jsonPath("$.ownerId") { value(OWNER) }
                     jsonPath("$.content") { value("let x: number = 5;") }
@@ -88,9 +88,55 @@ class SnippetControllerTest(
                 param("version", "1.0")
                 header(USER_HEADER, OWNER)
             }.andExpect {
-                status { isCreated() }
+                status { isOk() }
                 jsonPath("$.content") { value("println(1);") }
                 jsonPath("$.description") { value("") }
+            }
+    }
+
+    // el cuerpo tal cual lo manda el test de home de la catedra: sin version y con un extension de mas
+    @Test
+    fun `the request sent by the course cypress test is accepted with the default version`() {
+        mockMvc
+            .post("/snippets") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"name":"Test name","content":"println(1);","language":"printscript","extension":".ps"}"""
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.id") { exists() }
+                jsonPath("$.name") { value("Test name") }
+                jsonPath("$.content") { value("println(1);") }
+                jsonPath("$.language") { value("printscript") }
+                jsonPath("$.version") { value("1.1") }
+            }
+    }
+
+    @Test
+    fun `a file upload without version gets the default one`() {
+        mockMvc
+            .multipart("/snippets") {
+                file(MockMultipartFile("file", "suma.ps", "text/plain", "println(1);".toByteArray()))
+                param("name", "suma")
+                param("language", "printscript")
+                header(USER_HEADER, OWNER)
+            }.andExpect {
+                status { isOk() }
+                jsonPath("$.version") { value("1.1") }
+            }
+    }
+
+    // omitirla esta bien; mandarla vacia es un error del que llama
+    @Test
+    fun `a blank version is still rejected`() {
+        mockMvc
+            .post("/snippets") {
+                header(USER_HEADER, OWNER)
+                contentType = MediaType.APPLICATION_JSON
+                content = """{"name":"x","language":"printscript","version":" ","content":"println(1);"}"""
+            }.andExpect {
+                status { isBadRequest() }
+                jsonPath("$.error") { value("El campo 'version' no puede estar vacío") }
             }
     }
 
@@ -316,7 +362,7 @@ class SnippetControllerTest(
                 contentType = MediaType.APPLICATION_JSON
                 content = """{"name":"x","language":"printscript","version":"1.1","content":"println(1);"}"""
             }.andExpect {
-                status { isCreated() }
+                status { isOk() }
                 jsonPath("$.lintStatus") { value("PENDING") }
             }
         assertEquals(1, repository.count())
