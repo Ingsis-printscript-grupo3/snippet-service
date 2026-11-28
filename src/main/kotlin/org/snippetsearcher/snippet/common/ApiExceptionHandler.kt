@@ -48,7 +48,7 @@ class ApiExceptionHandler {
     @ResponseStatus(HttpStatus.FORBIDDEN)
     fun forbidden(e: ForbiddenException): ErrorResponse = ErrorResponse(e.message!!)
 
-    @ExceptionHandler(SnippetNotFoundException::class, JobNotFoundException::class)
+    @ExceptionHandler(SnippetNotFoundException::class, SnippetTestNotFoundException::class, JobNotFoundException::class)
     @ResponseStatus(HttpStatus.NOT_FOUND)
     fun notFound(e: RuntimeException): ErrorResponse = ErrorResponse(e.message!!)
 

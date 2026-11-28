@@ -1,6 +1,7 @@
 package org.snippetsearcher.snippet.support
 
 import org.snippetsearcher.snippet.common.DownstreamException
+import org.snippetsearcher.snippet.language.ExecutionResult
 import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.language.LanguageService
 import org.snippetsearcher.snippet.language.LintResult
@@ -66,6 +67,18 @@ class FakeLanguageService : LanguageService {
             ValidationResult(false, listOf(SnippetError("Expected ';'.", 2, 11, 2, 11)))
         } else {
             ValidationResult(true, emptyList())
+        }
+
+    // el "programa" imprime los inputs que recibe. Si el codigo dice "explota", falla despues del primero
+    override fun execute(
+        version: String,
+        content: String,
+        inputs: List<String>,
+    ): ExecutionResult =
+        if (content.contains("explota")) {
+            ExecutionResult(inputs.take(1), listOf(SnippetError("Division by zero.", 1, 1, 1, 2)))
+        } else {
+            ExecutionResult(inputs, emptyList())
         }
 
     override fun rules(type: RuleType): List<RuleDefinition> {
