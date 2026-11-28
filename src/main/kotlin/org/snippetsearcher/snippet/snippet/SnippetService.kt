@@ -9,6 +9,7 @@ import org.snippetsearcher.snippet.permission.Access
 import org.snippetsearcher.snippet.permission.PermissionClient
 import org.snippetsearcher.snippet.rule.SnippetLinter
 import org.snippetsearcher.snippet.storage.ContentStore
+import org.snippetsearcher.snippet.test.TestTriggerService
 import org.springframework.data.repository.findByIdOrNull
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
@@ -22,6 +23,7 @@ class SnippetService(
     private val permissions: PermissionClient,
     private val contents: ContentStore,
     private val linter: SnippetLinter,
+    private val testTrigger: TestTriggerService,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -70,21 +72,19 @@ class SnippetService(
         if (accessOf(snippet, userId) != Access.OWNER) {
             throw ForbiddenException("Solo el owner puede modificar el snippet")
         }
-
         val language = request.language ?: snippet.language
         val version = request.version ?: snippet.version
         val content = request.content ?: contents.get(snippet.contentKey)
-        // cambiar el codigo, el lenguaje o la version puede romper el snippet: se revalida
         val changesCode = request.content != null || language != snippet.language || version != snippet.version
         if (changesCode) validate(language, version, content)
 
-        request.name?.let { snippet.name = it }
-        request.description?.let { snippet.description = it }
-        snippet.language = language
-        snippet.version = version
-        snippet.updatedAt = Instant.now()
-        if (changesCode) snippet.lintStatus = linter.lint(snippet, content)
+        snippet.applyMetadata(request, language, version)
         if (request.content != null) contents.put(snippet.contentKey, content)
+        if (changesCode) {
+            snippet.formattedKey = null
+            snippet.lintStatus = linter.lint(snippet, content)
+            testTrigger.enqueueForSnippet(snippet, userId, content)
+        }
         return snippet.toResponse(content)
     }
 
