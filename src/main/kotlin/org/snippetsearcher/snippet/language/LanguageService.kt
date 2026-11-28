@@ -9,6 +9,9 @@ interface LanguageService {
     // es un archivo que se sube
     val extension: String
 
+    // la version que se usa cuando quien crea un snippet no manda ninguna
+    val defaultVersion: String
+
     fun validate(
         version: String,
         content: String,
@@ -93,4 +96,9 @@ class LanguageRegistry(
         )
 
     fun fileTypes(): List<FileType> = services.map { (language, service) -> FileType(language, service.extension) }
+
+    fun versionOrDefault(
+        language: String,
+        version: String?,
+    ): String = version ?: get(language).defaultVersion
 }

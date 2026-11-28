@@ -1,10 +1,24 @@
 package org.snippetsearcher.snippet.snippet
 
 import org.snippetsearcher.snippet.common.InvalidRequestException
+import org.snippetsearcher.snippet.language.LanguageRegistry
 import java.time.Instant
 import java.util.UUID
 
-// US1 y US3: el mismo pedido llega como JSON desde el editor o armado desde un archivo subido
+// US1 y US3: lo que llega por HTTP, como JSON desde el editor o armado desde un archivo subido.
+// version es opcional (el test de home de la catedra no la manda): si no viene, la pone el lenguaje
+data class CreateSnippetBody(
+    val name: String,
+    val description: String = "",
+    val language: String,
+    val version: String? = null,
+    val content: String,
+) {
+    fun toRequest(languages: LanguageRegistry) =
+        CreateSnippetRequest(name, description, language, languages.versionOrDefault(language, version), content)
+}
+
+// lo que el service necesita para crear un snippet: la version ya esta resuelta
 data class CreateSnippetRequest(
     val name: String,
     val description: String = "",
