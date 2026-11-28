@@ -15,6 +15,11 @@ class SnippetNotFoundException(
     id: UUID,
 ) : RuntimeException("No existe el snippet $id")
 
+// el test no existe, o es de otro snippet
+class SnippetTestNotFoundException(
+    id: UUID,
+) : RuntimeException("No existe el test $id")
+
 class JobNotFoundException(
     id: UUID,
 ) : RuntimeException("No existe el job $id")

@@ -30,6 +30,12 @@ class PrintScriptLanguageService(
         rules: Map<String, Any?>,
     ): LintResult = post("/lintings", LintRequest(PRINTSCRIPT, version, content, rules))
 
+    override fun execute(
+        version: String,
+        content: String,
+        inputs: List<String>,
+    ): ExecutionResult = post("/executions", ExecuteRequest(PRINTSCRIPT, version, content, inputs))
+
     override fun rules(type: RuleType): List<RuleDefinition> =
         callService("printscript-service") {
             client
@@ -70,6 +76,13 @@ class PrintScriptLanguageService(
         val version: String,
         val content: String,
         val rules: Map<String, Any?>,
+    )
+
+    data class ExecuteRequest(
+        val language: String,
+        val version: String,
+        val content: String,
+        val inputs: List<String>,
     )
 
     data class RemoteError(

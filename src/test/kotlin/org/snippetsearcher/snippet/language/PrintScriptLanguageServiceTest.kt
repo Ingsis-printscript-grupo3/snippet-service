@@ -30,6 +30,28 @@ class PrintScriptLanguageServiceTest {
     }
 
     @Test
+    fun `runs the snippet with its inputs in order and reads outputs and errors`() {
+        server
+            .expect(requestTo("http://printscript/executions"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.language").value("printscript"))
+            .andExpect(jsonPath("$.inputs[0]").value("a"))
+            .andExpect(jsonPath("$.inputs[1]").value("b"))
+            .andRespond(
+                withSuccess(
+                    """{"outputs":["a"],"errors":[{"message":"boom","line":1,"column":2,"endLine":1,"endColumn":3}]}""",
+                    MediaType.APPLICATION_JSON,
+                ),
+            )
+
+        val result = service.execute("1.1", "println(readInput(\"x\"));", listOf("a", "b"))
+
+        assertEquals(listOf("a"), result.outputs)
+        assertEquals(listOf(SnippetError("boom", 1, 2, 1, 3)), result.errors)
+        server.verify()
+    }
+
+    @Test
     fun `sends the snippet to validations and reads a valid result`() {
         server
             .expect(requestTo("http://printscript/validations"))
