@@ -116,7 +116,7 @@ class SnippetLinterTest(
                 header(USER_HEADER, userId)
                 contentType = MediaType.APPLICATION_JSON
                 content = """{"name":"snippet","language":"printscript","version":"1.1","content":"$code"}"""
-            }.andExpect { status { isCreated() } }
+            }.andExpect { status { isOk() } }
             .andReturn()
             .response.contentAsString
 
