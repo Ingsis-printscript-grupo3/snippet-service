@@ -2,6 +2,7 @@ package org.snippetsearcher.snippet.support
 
 import org.snippetsearcher.snippet.common.DownstreamException
 import org.snippetsearcher.snippet.language.ExecutionResult
+import org.snippetsearcher.snippet.language.FormattingResult
 import org.snippetsearcher.snippet.language.LanguageRegistry
 import org.snippetsearcher.snippet.language.LanguageService
 import org.snippetsearcher.snippet.language.LintResult
@@ -79,6 +80,19 @@ class FakeLanguageService : LanguageService {
             ExecutionResult(inputs.take(1), listOf(SnippetError("Division by zero.", 1, 1, 1, 2)))
         } else {
             ExecutionResult(inputs, emptyList())
+        }
+
+    // "formatear" agrega una linea con las reglas recibidas, asi el test ve con cuales se formateo.
+    // Un codigo con "error" no parsea
+    override fun format(
+        version: String,
+        content: String,
+        rules: Map<String, Any?>,
+    ): FormattingResult =
+        if (content.contains("error")) {
+            FormattingResult(null, listOf(SnippetError("Expected ';'.", 2, 11, 2, 11)))
+        } else {
+            FormattingResult("$content\n// ${rules.keys.sorted().joinToString()}", emptyList())
         }
 
     override fun rules(type: RuleType): List<RuleDefinition> {

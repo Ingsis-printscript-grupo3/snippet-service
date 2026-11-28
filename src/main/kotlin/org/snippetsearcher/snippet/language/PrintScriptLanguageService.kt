@@ -36,6 +36,12 @@ class PrintScriptLanguageService(
         inputs: List<String>,
     ): ExecutionResult = post("/executions", ExecuteRequest(PRINTSCRIPT, version, content, inputs))
 
+    override fun format(
+        version: String,
+        content: String,
+        rules: Map<String, Any?>,
+    ): FormattingResult = post("/formattings", FormatRequest(PRINTSCRIPT, version, content, rules))
+
     override fun rules(type: RuleType): List<RuleDefinition> =
         callService("printscript-service") {
             client
@@ -72,6 +78,13 @@ class PrintScriptLanguageService(
     )
 
     data class LintRequest(
+        val language: String,
+        val version: String,
+        val content: String,
+        val rules: Map<String, Any?>,
+    )
+
+    data class FormatRequest(
         val language: String,
         val version: String,
         val content: String,
