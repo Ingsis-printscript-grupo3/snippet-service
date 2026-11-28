@@ -34,7 +34,21 @@ interface LanguageService {
         content: String,
         inputs: List<String>,
     ): ExecutionResult
+
+    // rules son las reglas de formato del owner ya resueltas, con las claves del lenguaje.
+    // Un mapa vacio es "ninguna regla habilitada": el codigo vuelve como estaba
+    fun format(
+        version: String,
+        content: String,
+        rules: Map<String, Any?>,
+    ): FormattingResult
 }
+
+// content es null cuando el snippet no se puede parsear: ahi los errores dicen por que
+data class FormattingResult(
+    val content: String?,
+    val errors: List<SnippetError>,
+)
 
 data class ExecutionResult(
     val outputs: List<String>,

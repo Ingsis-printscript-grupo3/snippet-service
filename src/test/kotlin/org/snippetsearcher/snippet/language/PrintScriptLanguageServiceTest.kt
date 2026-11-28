@@ -52,6 +52,21 @@ class PrintScriptLanguageServiceTest {
     }
 
     @Test
+    fun `sends the format rules and reads the formatted code`() {
+        server
+            .expect(requestTo("http://printscript/formattings"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(jsonPath("$.language").value("printscript"))
+            .andExpect(jsonPath("$.rules.indent-inside-if").value(2))
+            .andRespond(withSuccess("""{"content":"let a = 1;","errors":[]}""", MediaType.APPLICATION_JSON))
+
+        val result = service.format("1.1", "let a=1;", mapOf("indent-inside-if" to 2))
+
+        assertEquals("let a = 1;", result.content)
+        server.verify()
+    }
+
+    @Test
     fun `sends the snippet to validations and reads a valid result`() {
         server
             .expect(requestTo("http://printscript/validations"))
