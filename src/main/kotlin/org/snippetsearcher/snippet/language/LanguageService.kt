@@ -26,7 +26,20 @@ interface LanguageService {
     ): LintResult
 
     fun rules(type: RuleType): List<RuleDefinition>
+
+    // corre el snippet entregando los inputs en orden. Que el snippet falle no es una falla del servicio:
+    // vuelve en errors, junto con lo que llego a imprimir
+    fun execute(
+        version: String,
+        content: String,
+        inputs: List<String>,
+    ): ExecutionResult
 }
+
+data class ExecutionResult(
+    val outputs: List<String>,
+    val errors: List<SnippetError>,
+)
 
 enum class RuleType {
     LINT,
